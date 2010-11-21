@@ -1,0 +1,51 @@
+fmtopts=('-spaces=false' '-tabwidth=4')
+
+fn f{
+	gofmt $fmtopts -s ../$1 > $1
+	diff $1
+}
+
+fn diff{
+	if (! cmp -s ../$1 $1) {
+		echo tkdiff $1 ,,fmt/$1
+	}
+}
+
+if(! test -d ,,fmt)
+	mkdir ,,fmt
+cd ,,fmt
+
+
+# split parser.leg into Go and leg parts, gofmt the Go parts,
+# and combine pieces to form a parser.leg again
+p=../parser.leg
+<$p >,,leg awk '
+	/^%%/ { copy=0 }
+	copy { print }
+	/^%}/ { copy=1 }
+'
+
+<$p >,,p.go awk '
+	/^%%/ { copy=1; $0 = "//" $0 }
+	/^%}/ { copy=0 }
+	copy { print }
+	/^%{/ { copy=1 }
+'
+gofmt $fmtopts -w -s ,,p.go
+
+>parser.leg {
+	echo '%{'
+	cat ,,p.go | sed '/^\/\/%%/,$d'
+	echo '%}'
+	cat ,,leg
+	echo %%
+	cat ,,p.go | sed '1,/^\/\/%%/d'	
+}
+
+
+f doc.go
+f markdown.go
+f output.go
+diff parser.leg
+
+~ 0 0

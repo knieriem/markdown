@@ -1,0 +1,37 @@
+# this sed script replaces some bits of the original leg file
+# to make it more similar to the Go version, thus avoiding
+# to many differences
+
+/\$\$/ {
+	s,\$\$->,$$.,g
+	/\$\$[^}]*$/s,\; *$,,g
+}
+
+s,parse_result,p.tree,
+s,references,p.references,
+s,notes,p.notes,
+s,find_reference,p.findReference,g
+
+s,->key,.key,g
+s,->children,.children,g
+s,->contents.str,.contents.str,g
+
+/{ *if (extens/ {
+	s,if (,if ,
+	s,)),),
+}
+/EXT/ s,if extension,if p.extension,
+/EXT/ s,{ *extension,{ p.extension,g
+/EXT/ s,{ *!extension,{ !p.extension,g
+
+s,{ *element \*[a-z]*\; *$,{,
+
+/raw\.key =/ s,;$,,
+/result =/ s,;$,,
+s,result = mk_el,result := mk_el,
+
+s,NULL,nil,g
+
+s, *\; *}, },g
+
+s,strlen(,len(,g

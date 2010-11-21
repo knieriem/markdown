@@ -1,0 +1,14 @@
+# use glob syntax.
+syntax: glob
+
+parser.leg.go
+cmd/markdown
+orig-c-src
+core
++*
+*.orig
+[58].*
+*.[58]
+,*
+*~
+[#]*
