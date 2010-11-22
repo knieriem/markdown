@@ -43,11 +43,12 @@ LEG = ./peg/leg/leg
 	$(LEG) $<
 
 $(LEG):
+	if(! test -d peg); then make peg; fi
 	make -C peg all
 	make -C peg/leg all
 
 peg:
-
+	hg clone http://bitbucket.org/knieriem/peg
 
 #
 # access to original C source files
