@@ -23,6 +23,12 @@ s,->contents.str,.contents.str,g
 /EXT/ s,if extension,if p.extension,
 /EXT/ s,{ *extension,{ p.extension,g
 /EXT/ s,{ *!extension,{ !p.extension,g
+/EXT/ {
+	s,extension.EXT_FILTER_HTML.,extension.FilterHTML,g
+	s,extension.EXT_FILTER_STYLES.,extension.FilterStyles,g
+	s,extension.EXT_SMART.,extension.Smart,g
+	s,extension.EXT_NOTES.,extension.Notes,g
+}
 
 s,{ *element \*[a-z]*\; *$,{,
 

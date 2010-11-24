@@ -13,7 +13,7 @@ Usage example:
 	func main() {
 		b, _ := ioutil.ReadAll(os.Stdin)
 
-		doc := md.Parse(string(b), md.EXT_SMART)
+		doc := md.Parse(string(b), md.Extensions{Smart: true})
 
 		w := bufio.NewWriter(os.Stdout)
 		doc.WriteHtml(w)	

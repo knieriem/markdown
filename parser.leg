@@ -87,12 +87,12 @@ const (
 )
 
 type Doc struct {
-	parser	*yyParser
+	parser		*yyParser
+	extension	Extensions
 
 	tree				*element	/* Results of parse. */
 	references			*element	/* List of link references found. */
 	notes				*element	/* List of footnotes found. */
-	syntaxExtensions	int			/* Syntax extensions selected. */
 }
 
 %}
@@ -370,7 +370,7 @@ HtmlBlockInTags = HtmlBlockOpenAddress (HtmlBlockInTags | !HtmlBlockCloseAddress
 
 HtmlBlock = < ( HtmlBlockInTags | HtmlComment | HtmlBlockSelfClosing ) >
             BlankLine+
-            {   if p.extension(EXT_FILTER_HTML) {
+            {   if p.extension.FilterHTML {
                     $$ = mk_list(LIST, nil)
                 } else {
                     $$ = mk_str(yytext)
@@ -392,7 +392,7 @@ StyleClose =    '<' Spnl '/' ("style" | "STYLE") Spnl '>'
 InStyleTags =   StyleOpen (!StyleClose .)* StyleClose
 StyleBlock =    < InStyleTags >
                 BlankLine*
-                {   if p.extension(EXT_FILTER_STYLES) {
+                {   if p.extension.FilterStyles {
                         $$ = mk_list(LIST, nil)
                     } else {
                         $$ = mk_str(yytext)
@@ -565,7 +565,7 @@ Reference = NonindentSpace !"[]" l:Label ':' Spnl s:RefSrc Spnl t:RefTitle Blank
               l = nil
               $$.key = REFERENCE }
 
-Label = '[' ( !'^' &{ p.extension(EXT_NOTES) } | &. &{ !p.extension(EXT_NOTES) } )
+Label = '[' ( !'^' &{ p.extension.Notes } | &. &{ !p.extension.Notes } )
         a:StartList
         ( !']' Inline { a = cons($$, a) } )*
         ']'
@@ -606,7 +606,7 @@ Code = ( Ticks1 Sp < ( ( !'`' Nonspacechar )+ | !Ticks1 '`'+ | !( Sp Ticks1 ) ( 
        { $$ = mk_str(yytext); $$.key = CODE }
 
 RawHtml =   < (HtmlComment | HtmlTag) >
-            {   if p.extension(EXT_FILTER_HTML) {
+            {   if p.extension.FilterHTML {
                     $$ = mk_list(LIST, nil)
                 } else {
                     $$ = mk_str(yytext)
@@ -653,10 +653,10 @@ SkipBlock = ( !BlankLine RawLine )+ BlankLine*
 
 # Syntax extensions
 
-ExtendedSpecialChar = &{ p.extension(EXT_SMART) } ('.' | '-' | '\'' | '"')
-                    | &{ p.extension(EXT_NOTES) } ( '^' )
+ExtendedSpecialChar = &{ p.extension.Smart } ('.' | '-' | '\'' | '"')
+                    | &{ p.extension.Notes } ( '^' )
 
-Smart = &{ p.extension(EXT_SMART) }
+Smart = &{ p.extension.Smart }
         ( Ellipsis | Dash | SingleQuoted | DoubleQuoted | Apostrophe )
 
 Apostrophe = '\''
@@ -693,7 +693,7 @@ DoubleQuoted =  DoubleQuoteStart
                 DoubleQuoteEnd
                 { $$ = mk_list(DOUBLEQUOTED, a) }
 
-NoteReference = &{ p.extension(EXT_NOTES) }
+NoteReference = &{ p.extension.Notes }
                 ref:RawNoteReference
                 {
                     if match, ok := p.find_note(ref.contents.str); ok {
@@ -708,7 +708,7 @@ NoteReference = &{ p.extension(EXT_NOTES) }
 RawNoteReference = "[^" < ( !Newline !']' . )+ > ']'
                    { $$ = mk_str(yytext) }
 
-Note =          &{ p.extension(EXT_NOTES) }
+Note =          &{ p.extension.Notes }
                 NonindentSpace ref:RawNoteReference ':' Sp
                 a:StartList
                 ( RawNoteBlock { a = cons($$, a) } )
@@ -717,7 +717,7 @@ Note =          &{ p.extension(EXT_NOTES) }
                     $$.contents.str = ref.contents.str
                 }
 
-InlineNote =    &{ p.extension(EXT_NOTES) }
+InlineNote =    &{ p.extension.Notes }
                 "^["
                 a:StartList
                 ( !']' Inline { a = cons($$, a) } )+
@@ -827,12 +827,6 @@ func mk_link(label *element, url, title string) *element {
 	return result
 }
 
-
-/* extension = returns true if extension is selected
- */
-func (d *Doc) extension(ext int) bool {
-	return d.syntaxExtensions&ext != 0
-}
 
 /* match_inlines - returns true if inline lists match (case-insensitive...)
  */

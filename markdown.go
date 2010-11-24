@@ -26,17 +26,19 @@ import (
 )
 
 // Markdown Extensions:
-const (
-	EXT_SMART	= 1 << iota
-	EXT_NOTES
-	EXT_FILTER_HTML
-	EXT_FILTER_STYLES
-)
+type Extensions struct {
+	Smart			bool
+	Notes			bool
+	FilterHTML		bool
+	FilterStyles	bool
+	Dlists			bool
+}
+
 
 // Parse converts a Markdown document into a tree for later output processing.
-func Parse(text string, extFlags int) *Doc {
+func Parse(text string, ext Extensions) *Doc {
 	d := new(Doc)
-	d.syntaxExtensions = extFlags
+	d.extension = ext
 
 	d.parser = new(yyParser)
 	d.parser.Doc = d
@@ -45,7 +47,7 @@ func Parse(text string, extFlags int) *Doc {
 	s := preformat(text)
 
 	d.parseRule(ruleReferences, s)
-	if extFlags&EXT_NOTES != 0 {
+	if ext.Notes {
 		d.parseRule(ruleNotes, s)
 	}
 	raw := d.parseMarkdown(s)

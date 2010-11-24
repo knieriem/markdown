@@ -26,12 +26,9 @@ func main() {
 		b, _ = ioutil.ReadAll(os.Stdin)
 	}
 
-	e := 0
-	if *optNotes {
-		e |= md.EXT_NOTES
-	}
-	if *optSmart {
-		e |= md.EXT_SMART
+	e := md.Extensions{
+		Notes: *optNotes,
+		Smart: *optSmart,
 	}
 
 	doc := md.Parse(string(b), e)
