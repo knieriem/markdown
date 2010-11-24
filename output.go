@@ -169,7 +169,7 @@ func (w *htmlOut) elem(elt *element, obfuscate bool) *htmlOut {
 		/* Shouldn't occur - these are handled by process_raw_blocks() */
 		log.Exitf("RAW")
 	case H1, H2, H3, H4, H5, H6:
-		h := fmt.Sprintf("h%1d>", elt.key-H1+1)	/* assumes H1 ... H6 are in order */
+		h := "h" + string('1'+elt.key-H1) + ">"	/* assumes H1 ... H6 are in order */
 		w.pad(2).s("<").s(h).elist(elt.children, obfuscate).s("</").s(h).pset(0)
 	case PLAIN:
 		w.pad(1).elist(elt.children, obfuscate).pset(0)
