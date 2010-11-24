@@ -73,7 +73,6 @@ func (d *Doc) parseMarkdown(text string) *element {
  * of parent elements.  The result should be a tree of elements without any RAWs.
  */
 func (d *Doc) processRawBlocks(input *element) *element {
-	var last_child *element
 
 	for current := input; current != nil; current = current.next {
 		if current.key == RAW {
@@ -83,17 +82,14 @@ func (d *Doc) processRawBlocks(input *element) *element {
 			 */
 			current.key = LIST
 			current.children = nil
+			listEnd := &current.children
 			for _, contents := range strings.Split(current.contents.str, "\001", -1) {
 				list := d.parseMarkdown(contents)
-				if current.children == nil {
-					current.children = list
-					last_child = list
-				} else {
-					last_child.next = list
+				*listEnd = list
+				for list.next != nil {
+					list = list.next
 				}
-				for last_child.next != nil {
-					last_child = last_child.next
-				}
+				listEnd = &list.next
 			}
 			current.contents.str = ""
 		}
