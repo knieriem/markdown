@@ -21,6 +21,7 @@ package markdown
 
 import (
 	"strings"
+	"bytes"
 )
 
 // Markdown Extensions:
@@ -115,16 +116,17 @@ func preformat(text string) (s string) {
 	charstotab := TABSTOP
 	i0 := 0
 
+	b := bytes.NewBuffer(make([]byte, 0, len(text)+256))
 	for i, _ := range text {
 		switch text[i] {
 		case '\t':
-			s += text[i0:i]
+			b.WriteString(text[i0:i])
 			for ; charstotab > 0; charstotab-- {
-				s += " "
+				b.WriteByte(' ')
 			}
 			i0 = i + 1
 		case '\n':
-			s += text[i0 : i+1]
+			b.WriteString(text[i0 : i+1])
 			i0 = i + 1
 			charstotab = TABSTOP
 		default:
@@ -134,5 +136,7 @@ func preformat(text string) (s string) {
 			charstotab = TABSTOP
 		}
 	}
-	return s + text[i0:] + "\n\n"
+	b.WriteString(text[i0:])
+	b.WriteString("\n\n")
+	return b.String()
 }
