@@ -46,12 +46,13 @@ type htmlOut struct {
 func (d *Doc) WriteHtml(w Writer) int {
 	out := new(htmlOut)
 	out.Writer = w
-
 	out.padded = 2
 	out.elist(d.tree, false)
-	out.pad(2)
-	out.printEndnotes()
-
+	if len(out.endNotes) != 0 {
+		out.pad(2)
+		out.printEndnotes()
+	}
+	out.WriteByte('\n')
 	return 0
 }
 
@@ -214,9 +215,6 @@ func (w *htmlOut) elem(elt *element, obfuscate bool) *htmlOut {
 func (w *htmlOut) printEndnotes() {
 	counter := 0
 
-	if len(w.endNotes) == 0 {
-		return
-	}
 	w.s("<hr/>\n<ol id=\"notes\">")
 	for _, elt := range w.endNotes {
 		counter++
