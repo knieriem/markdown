@@ -87,6 +87,8 @@ const (
 )
 
 type Doc struct {
+	parser	*yyParser
+
 	tree				*element	/* Results of parse. */
 	references			*element	/* List of link references found. */
 	notes				*element	/* List of footnotes found. */

@@ -22,6 +22,7 @@ package markdown
 import (
 	"strings"
 	"bytes"
+	"log"
 )
 
 // Markdown Extensions:
@@ -37,6 +38,10 @@ func Parse(text string, extFlags int) *Doc {
 	d := new(Doc)
 	d.syntaxExtensions = extFlags
 
+	d.parser = new(yyParser)
+	d.parser.Doc = d
+	d.parser.Init()
+
 	s := preformat(text)
 
 	d.parseRule(ruleReferences, s)
@@ -49,21 +54,17 @@ func Parse(text string, extFlags int) *Doc {
 }
 
 func (d *Doc) parseRule(rule int, s string) {
-	m := new(yyParser)
-	m.Doc = d
-	m.Init()
-	m.Buffer = s
+	m := d.parser
+	if m.ResetBuffer(s) != "" {
+		log.Exitf("Buffer not empty")
+	}
 	if !m.Parse(rule) {
 		m.PrintError()
 	}
 }
 
 func (d *Doc) parseMarkdown(text string) *element {
-	m := new(yyParser)
-	m.Doc = d
-	m.Init()
-	m.Buffer = text
-	m.Parse(ruleDoc)
+	d.parseRule(ruleDoc, text)
 	return d.tree
 }
 
