@@ -50,8 +50,8 @@ LEG = ./peg/leg/leg
 
 $(LEG):
 	if(! test -d peg); then make peg; fi
-	make -C peg all
-	make -C peg/leg all
+	make -C peg all GOOS=$(GOHOSTOS) GOARCH=$(GOHOSTARCH)
+	make -C peg/leg all GOOS=$(GOHOSTOS) GOARCH=$(GOHOSTARCH)
 
 peg:
 	$(VCS) clone $(GITHUB)/knieriem/peg
