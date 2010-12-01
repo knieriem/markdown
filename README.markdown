@@ -67,23 +67,6 @@ See the [original README][] for details.
 [original README]: https://github.com/jgm/peg-markdown/blob/master/README.markdown
 [knieriem/peg]: https://github.com/knieriem/peg
 
-## Known issues
-
-Emphasis and strong markup within items of lists, as in input
-like ./PHP Markdown Extra.mdtest/Emphasis.text from Michel
-Fortin's [MDTest][] package,
-
-	1.  ***test test***
-	2.  ___test test___
-	3.  *test **test***
-	4.  **test *test***
-	...
-
-seem to present a problem for the LEG parser, which needs
-(on my system) around four minutes to process that file.
-
-[MDTest]: http://git.michelf.com/mdtest/
-
 ## Todo
 
 *	Implement definition lists (work in progress), and perhaps tables
