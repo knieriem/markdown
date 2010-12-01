@@ -1,6 +1,6 @@
 include $(GOROOT)/src/Make.inc 
 
-TARG=markdown
+TARG=github.com/knieriem/markdown
 GOFILES=\
 	markdown.go\
 	output.go\
@@ -35,6 +35,12 @@ clean-sub:
 	for dir in cmd peg peg/leg; do make -C $$dir clean; done
 
 
+VCS = git
+GITHUB = git://github.com
+# also, if hggit extension is available:
+# VCS = hg
+
+
 #
 # LEG parser generator stuff
 #
@@ -48,17 +54,14 @@ $(LEG):
 	make -C peg/leg all
 
 peg:
-	hg clone http://bitbucket.org/knieriem/peg
+	$(VCS) clone $(GITHUB)/knieriem/peg
 
 #
 # access to original C source files
 #
-VCS = git
-# also, if hggit extension is available:
-# VCS = hg
 
 orig-c-src:
-	$(VCS) clone git://github.com/jgm/peg-markdown.git $@
+	$(VCS) clone $(GITHUB)/jgm/peg-markdown.git $@
 
 
 

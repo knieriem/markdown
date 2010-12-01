@@ -1,7 +1,7 @@
 package main
 
 import (
-	md "../_obj/markdown"
+	"../_obj/github.com/knieriem/markdown"
 	"flag"
 	"fmt"
 	"os"
@@ -18,6 +18,7 @@ func main() {
 	}
 	optNotes := flag.Bool("notes", false, "turn on footnote syntax")
 	optSmart := flag.Bool("smart", false, "turn on smart quotes, dashes, and ellipses")
+	optDlists := flag.Bool("dlists", false, "support definitions lists")
 	flag.Parse()
 
 	if flag.NArg() > 0 {
@@ -26,12 +27,13 @@ func main() {
 		b, _ = ioutil.ReadAll(os.Stdin)
 	}
 
-	e := md.Extensions{
+	e := markdown.Extensions{
 		Notes: *optNotes,
 		Smart: *optSmart,
+		Dlists: *optDlists,
 	}
 
-	doc := md.Parse(string(b), e)
+	doc := markdown.Parse(string(b), e)
 	w := bufio.NewWriter(os.Stdout)
 	doc.WriteHtml(w)
 	w.Flush()

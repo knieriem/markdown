@@ -4,8 +4,9 @@ TARG=markdown
 GOFILES=\
 	main.go\
 
+LIBMD = github.com/knieriem/markdown
 R = ..
-PREREQ += $(R)/_obj/markdown.a
+PREREQ += $(R)/_obj/$(LIBMD).a
 
 include $(GOROOT)/src/Make.cmd 
 
