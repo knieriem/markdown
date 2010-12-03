@@ -80,28 +80,42 @@ func (w *htmlOut) s(s string) *htmlOut {
 /* print string, escaping for HTML  
  * If obfuscate selected, convert characters to hex or decimal entities at random
  */
-func (w *htmlOut) str(hs string, obfuscate bool) *htmlOut {
-	for _, r := range hs {
+func (w *htmlOut) str(s string, obfuscate bool) *htmlOut {
+	var ws string
+	var i0 = 0
+
+	for i, r := range s {
 		switch r {
 		case '&':
-			w.s("&amp;")
+			ws = "&amp;"
 		case '<':
-			w.s("&lt;")
+			ws = "&lt;"
 		case '>':
-			w.s("&gt;")
+			ws = "&gt;"
 		case '"':
-			w.s("&quot;")
+			ws = "&quot;"
 		default:
 			if obfuscate {
 				if rand.Intn(1) == 0 {
-					w.s(fmt.Sprintf("&#%d;", r))
+					ws = fmt.Sprintf("&#%d;", r)
 				} else {
-					w.s(fmt.Sprintf("&#%x;", r))
+					ws = fmt.Sprintf("&#%x;", r)
 				}
 			} else {
-				w.WriteRune(r)
+				if i0 == -1 {
+					i0 = i
+				}
+				continue
 			}
 		}
+		if i0 != -1 {
+			w.WriteString(s[i0:i])
+			i0 = -1
+		}
+		w.WriteString(ws)
+	}
+	if i0 != -1 {
+		w.WriteString(s[i0:])
 	}
 	return w
 }
