@@ -46,6 +46,10 @@ finish the installation:
 
 See doc.go for an example how to use the package.
 
+To update [knieriem/peg][] run `gomake update-peg`. This
+will fetch available revisions from github, and remove the
+old *leg* binary.
+
 To create the command line program *markdown,* run
 
 	cd $GOROOT/src/pkg/github.com/knieriem/markdown

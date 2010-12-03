@@ -39,6 +39,7 @@ VCS = git
 GITHUB = git://github.com
 # also, if hggit extension is available:
 # VCS = hg
+VCS-PULLFLAGS = 
 
 
 #
@@ -55,6 +56,11 @@ $(LEG):
 
 peg:
 	$(VCS) clone $(GITHUB)/knieriem/peg
+
+update-peg:
+	cd peg && $(VCS) pull $(VCS-PULLFLAGS)
+	cd peg/leg && make clean
+
 
 #
 # access to original C source files
