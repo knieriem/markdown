@@ -14,13 +14,11 @@ Support for HTML output is implemented, but Groff and LaTeX
 output have not been ported. The output should be identical
 to that of peg-markdown.
 
-The Go version is around 5x slower than the original C
+The Go version is around 3.5x slower than the original C
 version.  A marked speed improvement has been achieved by
 converting function `preformat` from concatenating strings
 to using bytes.Buffer. At other places, where this kind of
-modification had been tried, performance did not improve. Also,
-pre-allocating a large buffer for `element`s didn't show a
-significant difference from allocating `element`s one at a time.
+modification had been tried, performance did not improve.
 
 ## Installation
 
@@ -98,7 +96,7 @@ As definition item markers both `:` and `~` can be used.
 
 ## Todo
 
-*	Implement definition lists (work in progress), and perhaps tables
+*	Implement tables
 
 *	Rename element key identifiers, so that they are not public
 
