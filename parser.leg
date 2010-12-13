@@ -84,6 +84,9 @@ const (
 	HRULE
 	REFERENCE
 	NOTE
+	DEFINITIONLIST
+	DEFTITLE
+	DEFDATA
 	numVAL
 )
 
@@ -114,6 +117,7 @@ Block =     BlankLine*
             | Reference
             | HorizontalRule
             | Heading
+            | DefinitionList
             | OrderedList
             | BulletList
             | HtmlBlock
@@ -191,7 +195,7 @@ BulletList = &Bullet (ListTight | ListLoose)
 
 ListTight = a:StartList
             ( ListItem { a = cons($$, a) } )+
-            BlankLine* !(Bullet | Enumerator)
+            BlankLine* !(Bullet | Enumerator | DefMarker)
             { $$ = mk_list(LIST, a) }
 
 ListLoose = a:StartList
@@ -203,7 +207,7 @@ ListLoose = a:StartList
               } )+
             { $$ = mk_list(LIST, a) }
 
-ListItem =  ( Bullet | Enumerator )
+ListItem =  ( Bullet | Enumerator | DefMarker )
             a:StartList
             ListBlock { a = cons($$, a) }
             ( ListContinuationBlock { a = cons($$, a) } )*
@@ -235,7 +239,7 @@ Enumerator = NonindentSpace [0-9]+ '.' Spacechar+
 OrderedList = &Enumerator (ListTight | ListLoose)
               { $$.key = ORDEREDLIST }
 
-ListBlockLine = !( Indent? (Bullet | Enumerator) )
+ListBlockLine = !( (Indent? (Bullet | Enumerator)) | DefMarker )
                 !BlankLine
                 !HorizontalRule
                 OptionallyIndentedLine
@@ -744,6 +748,38 @@ RawNoteBlock =  a:StartList
                     $$.key = RAW
                 }
 
+
+DefinitionList = &{ p.extension.Dlists }
+			a:StartList
+			( Definition { a = cons($$, a) } )+ 
+			{ $$ = mk_list(DEFINITIONLIST, a) }
+
+Definition =	&( (!Defmark RawLine)+ BlankLine? Defmark)
+			a:StartList
+			( DListTitle { a = cons($$, a) } )+
+			( DefTight | DefLoose ) {
+				for e := $$.children; e != nil; e = e.next {
+					e.key = DEFDATA
+				}
+				a = cons($$, a)
+			}
+			{ $$ = mk_list(LIST, a) }
+
+DListTitle =	NonindentSpace !Defmark &Nonspacechar
+			a:StartList
+			(!Endline Inline { a = cons($$, a) } )+
+			Sp Newline
+			{	$$ = mk_list(LIST, a)
+				$$.key = DEFTITLE
+			}
+
+DefTight	= &Defmark ListTight
+DefLoose	= BlankLine &Defmark ListLoose
+
+Defmark	= NonindentSpace (':' | '~') Spacechar+
+DefMarker	= &{ p.extension.Dlists } Defmark
+
+
 %%
 
 
@@ -963,4 +999,7 @@ var keynames = [numVAL]string{
 	HRULE:			"HRULE",
 	REFERENCE:		"REFERENCE",
 	NOTE:			"NOTE",
+	DEFINITIONLIST:	"DEFINITIONLIST",
+	DEFTITLE:		"DEFTITLE",
+	DEFDATA:		"DEFDATA",
 }

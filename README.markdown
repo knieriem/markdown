@@ -71,6 +71,25 @@ See the [original README][] for details.
 [original README]: https://github.com/jgm/peg-markdown/blob/master/README.markdown
 [knieriem/peg]: https://github.com/knieriem/peg
 
+
+## Extensions
+
+In addition to the extensions already present in peg-markdown,
+this package also supports definition lists (option `-dlists`)
+similar to the way they are described in the documentation of
+[PHP Markdown Extra][].
+
+Definitions (`<dd>...</dd>`) are implemented using [ListTight][]
+and `ListLoose`, on which bullet lists and ordered lists are based
+already. If there is an empty line between the definition title and
+the first definition, a loose list is expected, a tight list otherwise.
+
+As definition item markers both `:` and `~` can be used.
+
+[PHP Markdown Extra]: http://michelf.com/projects/php-markdown/extra/#def-list
+[ListTight]: https://github.com/knieriem/markdown/blob/master/parser.leg#L191
+
+
 ## Todo
 
 *	Implement definition lists (work in progress), and perhaps tables

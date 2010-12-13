@@ -1,0 +1,19 @@
+# print file and line number of closure func_$1
+
+fnid=$1
+pkg=markdown
+
+account=github.com/knieriem
+objpfx=$GOROOT/src/pkg/$account/+m/_obj
+prj=$account
+cmd=(info line $objpfx/$prj/$pkg._func_$fnid)
+cmd=`{echo $cmd | sed 's,\.com,%2ecom,g'}
+echo $cmd
+gdb --batch --eval-command $"cmd ./cmd/markdown >[2] /dev/null |
+	grep '^Line.*of' |
+	awk '
+	{
+		gsub("\"", "", $4)
+		print $4 ":" $2
+	}
+'

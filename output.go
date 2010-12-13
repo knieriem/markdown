@@ -199,6 +199,12 @@ func (w *htmlOut) elem(elt *element, obfuscate bool) *htmlOut {
 		w.pad(2).s("<ul>").pset(0).elist(elt.children, obfuscate).pad(1).s("</ul>").pset(0)
 	case ORDEREDLIST:
 		w.pad(2).s("<ol>").pset(0).elist(elt.children, obfuscate).pad(1).s("</ol>").pset(0)
+	case DEFINITIONLIST:
+		w.pad(2).s("<dl>").pset(0).elist(elt.children, obfuscate).pad(1).s("</dl>").pset(0)
+	case DEFTITLE:
+		w.pad(1).s("<dt>").pset(2).elist(elt.children, obfuscate).s("</dt>").pset(0)
+	case DEFDATA:
+		w.pad(1).s("<dd>").pset(2).elist(elt.children, obfuscate).s("</dd>").pset(0)
 	case LISTITEM:
 		w.pad(1).s("<li>").pset(2).elist(elt.children, obfuscate).s("</li>").pset(0)
 	case BLOCKQUOTE:
