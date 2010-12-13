@@ -375,7 +375,7 @@ HtmlBlockInTags = HtmlBlockOpenAddress (HtmlBlockInTags | !HtmlBlockCloseAddress
                 | HtmlBlockOpenTr (HtmlBlockInTags | !HtmlBlockCloseTr .)* HtmlBlockCloseTr
                 | HtmlBlockOpenScript (HtmlBlockInTags | !HtmlBlockCloseScript .)* HtmlBlockCloseScript
 
-HtmlBlock = < ( HtmlBlockInTags | HtmlComment | HtmlBlockSelfClosing ) >
+HtmlBlock = &'<' < ( HtmlBlockInTags | HtmlComment | HtmlBlockSelfClosing ) >
             BlankLine+
             {   if p.extension.FilterHTML {
                     $$ = mk_list(LIST, nil)
