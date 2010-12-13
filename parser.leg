@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"strings"
 	"log"
+	"sync"
 )
 
 // Semantic value of a parsing action.
@@ -790,8 +791,19 @@ func concat_string_list(list *element) string {
 
 /* mk_element - generic constructor for element
  */
+var elbuf []element
+var elock sync.Mutex
+
 func mk_element(key int) *element {
-	return &element{key: key}
+	elock.Lock()
+	if len(elbuf) == 0 {
+		elbuf = make([]element, 1024)
+	}
+	e := &elbuf[0]
+	elbuf = elbuf[1:]
+	elock.Unlock()
+	e.key = key
+	return e
 }
 
 /* mk_str - constructor for STR element
