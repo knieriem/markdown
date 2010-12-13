@@ -30,25 +30,9 @@ Provided you have a recent copy of Go, and git is available,
 
 should install the package into
 `$GOROOT/src/pkg/github.com/knieriem/markdown`, and build
-it. During the build, a copy of [knieriem/peg][] will be
-downloaded from github and compiled (`make peg` if done
-manually).
-
-**NOTE:** At the moment, goinstall most likely will fail,
-as it does not use the package's Makefile, but generates
-its own, which is not sufficient as it does not know how
-to build parser.leg.go from parser.leg.  As a workaround,
-after the failed goinstall, please do the following steps to
-finish the installation:
-
-	cd $GOROOT/src/pkg/github.com/knieriem/markdown
-	gomake install
+it.
 
 See doc.go for an example how to use the package.
-
-To update [knieriem/peg][] run `gomake update-peg`. This
-will fetch available revisions from github, and remove the
-old *leg* binary.
 
 To create the command line program *markdown,* run
 
@@ -69,6 +53,28 @@ applies to peg-markdown, because the grammar is the same.
 See the [original README][] for details.
 
 [original README]: https://github.com/jgm/peg-markdown/blob/master/README.markdown
+
+## Development
+
+[`Goinstall`][Goinstall] is creating its own Makefiles to build
+packages, based on the `.go` files found in the directory.
+It would not know about `parser.leg.go`, which had to be built
+by `leg` from the `parser.leg` grammar source file first.
+Because of this, to make *markdown* installable using
+`goinstall`, `parser.leg.go` has been added to the VCS.
+
+`Make` will update `parser.leg.go` using `leg`, which is part of
+[knieriem/peg][] at github, if parser.leg has been changed. If
+a copy of this package has not yet been downloaded -- i.e. no
+directory `./peg` is present --, `make` will perform the
+neccessary steps automatically (run `make peg` to manually
+download [knieriem/peg][]).
+
+To update [knieriem/peg][] run `gomake update-peg`. This will
+fetch available revisions from github, and remove the old
+*leg* binary.
+
+[goinstall]: http://golang.org/cmd/goinstall/
 [knieriem/peg]: https://github.com/knieriem/peg
 
 
@@ -79,7 +85,7 @@ this package also supports definition lists (option `-dlists`)
 similar to the way they are described in the documentation of
 [PHP Markdown Extra][].
 
-Definitions (`<dd>...</dd>`) are implemented using [ListTight][]
+Definitions (`<dd>...</dd>`) are implemented using [`ListTight`][ListTight]
 and `ListLoose`, on which bullet lists and ordered lists are based
 already. If there is an empty line between the definition title and
 the first definition, a loose list is expected, a tight list otherwise.
