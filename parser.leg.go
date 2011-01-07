@@ -7388,7 +7388,7 @@ func (p *yyParser) Init() {
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 106 Str <- (< NormalChar (NormalChar / ('_'+ &NormalChar))* > { yy = mk_str(yytext) }) */
+		/* 106 Str <- (< NormalChar (NormalChar / ('_'+ &Alphanumeric))* > { yy = mk_str(yytext) }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			begin = position
@@ -7421,7 +7421,7 @@ func (p *yyParser) Init() {
 					}
 					{
 						position764, thunkPosition764 := position, thunkPosition
-						if !p.rules[ruleNormalChar]() {
+						if !p.rules[ruleAlphanumeric]() {
 							goto l759
 						}
 						position, thunkPosition = position764, thunkPosition764
