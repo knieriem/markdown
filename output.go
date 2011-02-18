@@ -181,7 +181,7 @@ func (w *htmlOut) elem(elt *element, obfuscate bool) *htmlOut {
 		w.elist(elt.children, obfuscate)
 	case RAW:
 		/* Shouldn't occur - these are handled by process_raw_blocks() */
-		log.Exitf("RAW")
+		log.Fatalf("RAW")
 	case H1, H2, H3, H4, H5, H6:
 		h := "h" + string('1'+elt.key-H1) + ">"	/* assumes H1 ... H6 are in order */
 		w.pad(2).s("<").s(h).elist(elt.children, obfuscate).s("</").s(h).pset(0)
@@ -223,7 +223,7 @@ func (w *htmlOut) elem(elt *element, obfuscate bool) *htmlOut {
 				nn, nn, nn, nn)
 		}
 	default:
-		log.Exitf("htmlOut.elem encountered unknown element key = %d\n", elt.key)
+		log.Fatalf("htmlOut.elem encountered unknown element key = %d\n", elt.key)
 	}
 	if s != "" {
 		w.s(s)

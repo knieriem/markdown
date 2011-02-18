@@ -903,7 +903,7 @@ func match_inlines(l1, l2 *element) bool {
 		case LINK, IMAGE:
 			return false	/* No links or images within links */
 		default:
-			log.Exitf("match_inlines encountered unknown key = %d\n", l1.key)
+			log.Fatalf("match_inlines encountered unknown key = %d\n", l1.key)
 		}
 		l1 = l1.next
 		l2 = l2.next

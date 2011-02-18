@@ -58,7 +58,7 @@ func Parse(text string, ext Extensions) *Doc {
 func (d *Doc) parseRule(rule int, s string) {
 	m := d.parser
 	if m.ResetBuffer(s) != "" {
-		log.Exitf("Buffer not empty")
+		log.Fatalf("Buffer not empty")
 	}
 	if !m.Parse(rule) {
 		m.PrintError()
