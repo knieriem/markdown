@@ -194,7 +194,7 @@ BulletList = &Bullet (ListTight | ListLoose)
              { $$.key = BULLETLIST }
 
 ListTight = a:StartList
-            ( ListItem { a = cons($$, a) } )+
+            ( ListItemTight { a = cons($$, a) } )+
             BlankLine* !(Bullet | Enumerator | DefMarker)
             { $$ = mk_list(LIST, a) }
 
@@ -211,6 +211,20 @@ ListItem =  ( Bullet | Enumerator | DefMarker )
             a:StartList
             ListBlock { a = cons($$, a) }
             ( ListContinuationBlock { a = cons($$, a) } )*
+            {
+               raw := mk_str_from_list(a, false)
+               raw.key = RAW
+               $$ = mk_element(LISTITEM)
+               $$.children = raw
+            }
+
+ListItemTight =
+            ( Bullet | Enumerator | DefMarker )
+            a:StartList
+            ListBlock { a = cons($$, a) }
+            ( !BlankLine
+              ListContinuationBlock { a = cons($$, a) } )*
+            !ListContinuationBlock
             {
                raw := mk_str_from_list(a, false)
                raw.key = RAW
