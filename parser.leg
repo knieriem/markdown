@@ -219,7 +219,7 @@ ListItem =  ( Bullet | Enumerator | DefMarker )
             }
 
 ListBlock = a:StartList
-            Line { a = cons($$, a) }
+            !BlankLine Line { a = cons($$, a) }
             ( ListBlockLine { a = cons($$, a) } )*
             { $$ = mk_str_from_list(a, false) }
 
@@ -239,8 +239,8 @@ Enumerator = NonindentSpace [0-9]+ '.' Spacechar+
 OrderedList = &Enumerator (ListTight | ListLoose)
               { $$.key = ORDEREDLIST }
 
-ListBlockLine = !( (Indent? (Bullet | Enumerator)) | DefMarker )
-                !BlankLine
+ListBlockLine = !BlankLine
+                !( (Indent? (Bullet | Enumerator)) | DefMarker )
                 !HorizontalRule
                 OptionallyIndentedLine
 
