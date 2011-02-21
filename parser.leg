@@ -508,7 +508,13 @@ StrongUl =  TwoUlOpen
             { $$ = mk_list(STRONG, a) }
 
 Image = '!' ( ExplicitLink | ReferenceLink )
-        { $$.key = IMAGE }
+        {	if $$.key == LINK {
+			$$.key = IMAGE
+		} else {
+			result := $$
+			$$.children = cons(mk_str("!"), result.children)
+		}
+	}
 
 Link =  ExplicitLink | ReferenceLink | AutoLink
 
