@@ -136,7 +136,7 @@ AtxInline = !Newline !(Sp? '#'* Sp Newline) Inline
 AtxStart =  &'#' < ( "######" | "#####" | "####" | "###" | "##" | "#" ) >
             { $$ = mk_element(H1 + (len(yytext) - 1)) }
 
-AtxHeading = s:AtxStart Sp a:StartList ( AtxInline { a = cons($$, a) } )+ (Sp? '#'* Sp)?  Newline
+AtxHeading = s:AtxStart Sp? a:StartList ( AtxInline { a = cons($$, a) } )+ (Sp? '#'* Sp)?  Newline
             { $$ = mk_list(s.key, a)
               s = nil }
 
