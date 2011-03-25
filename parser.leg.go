@@ -9153,16 +9153,11 @@ func (p *yyParser) Init() {
 					position, thunkPosition = position932, thunkPosition932
 				}
 				goto l929
-			l930:
-				position, thunkPosition = position929, thunkPosition929
-				if !matchString("") {
-					goto l928
-				}
+				_, _ = position929, thunkPosition929
 			}
 		l929:
 			return true
-		l928:
-			position, thunkPosition = position0, thunkPosition0
+			_, _ = position0, thunkPosition0
 			return false
 		},
 		/* 173 Title <- ((TitleSingle / TitleDouble / (< '' >)) { yy = mk_str(yytext) }) */
