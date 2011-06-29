@@ -47,7 +47,7 @@ VCS-PULLFLAGS =
 #
 LEG = ./peg/leg/leg
 %.leg.go: %.leg $(LEG)
-	$(LEG) $<
+	$(LEG) -switch $<
 
 $(LEG):
 	if(! test -d peg); then make peg; fi

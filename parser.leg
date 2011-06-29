@@ -105,6 +105,7 @@ type Doc struct {
 
 %YYSTYPE *element
 
+%switchexcl(HtmlBlock Code Title RefTitle)
 
 Doc =       a:StartList ( Block { a = cons($$, a) } )*
             { p.tree = reverse(a) }
