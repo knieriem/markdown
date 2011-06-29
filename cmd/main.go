@@ -7,7 +7,11 @@ import (
 	"os"
 	"bufio"
 	"io/ioutil"
+	"log"
+	"runtime/pprof"
 )
+
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 
 func main() {
 	var b []byte
@@ -31,6 +35,15 @@ func main() {
 		Notes: *optNotes,
 		Smart: *optSmart,
 		Dlists: *optDlists,
+	}
+
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
 	}
 
 	doc := markdown.Parse(string(b), e)
