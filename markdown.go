@@ -86,7 +86,7 @@ func (d *Doc) processRawBlocks(input *element) *element {
 			current.key = LIST
 			current.children = nil
 			listEnd := &current.children
-			for _, contents := range strings.Split(current.contents.str, "\001", -1) {
+			for _, contents := range strings.Split(current.contents.str, "\001") {
 				if list := d.parseMarkdown(contents); list != nil {
 					*listEnd = list
 					for list.next != nil {
