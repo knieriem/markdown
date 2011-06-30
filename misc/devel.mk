@@ -12,5 +12,15 @@ diff: ,,c
 
 orig-c-src/markdown_parser.leg: orig-c-src
 
+#
+# pprof
+#
+pprof: cmd m
+	./cmd/markdown -cpuprofile /tmp/md.prof <m > /tmp/,,md.out
+	@echo gopprof \'--nodefraction=0.1\' ./cmd/markdown /tmp/md.prof
+	@echo gopprof ./cmd/markdown /tmp/md.prof
 
-.PHONY: diff gofmt
+.PHONY:\
+	diff\
+	gofmt\
+	pprof\
