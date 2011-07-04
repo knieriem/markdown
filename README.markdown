@@ -14,11 +14,28 @@ Support for HTML output is implemented, but Groff and LaTeX
 output have not been ported. The output should be identical
 to that of peg-markdown.
 
-The Go version is around 3.5x slower than the original C
-version.  A marked speed improvement has been achieved by
-converting function `preformat` from concatenating strings
-to using bytes.Buffer. At other places, where this kind of
-modification had been tried, performance did not improve.
+A simple benchmark has been done by comparing the
+execution time of the Go binary (cmd/main.go) and the
+original C implementation's binary needed for processing
+a Markdown document, which had been created by
+concatenating ten [Markdown syntax descriptions][syntax].
+
+  [syntax]: http://daringfireball.net/projects/markdown/syntax.text
+
+In [December 2010][dec], the `8g` compiled Go version still was 
+around 3.5 times slower than the original C version.
+
+  [dec]: https://github.com/knieriem/markdown/commit/b3f7b3
+
+In the meantime Go compilers and runtime have been improved,
+which reduced the factor down to around 2.5 for both `8g` and `6g`
+for the unmodified sources.
+
+After some current changes to the peg/leg parser generator
+the Markdown parser can take advantage of the *switch* optimization
+now. This further reduced the execution time difference
+to 1.9x for `6/8g`.
+
 
 ## Installation
 
