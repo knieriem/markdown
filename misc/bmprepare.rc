@@ -21,11 +21,13 @@ fn updatetree{			# hg-id dir hg-url make-target
 	~ 0 0
 }
 
+test -f portid
+test -f previd
 
-echo '*' prepare original c-based peg-markdown ($portid)
+id=`{cat portid}
+echo '*' prepare original c-based peg-markdown $id
+updatetree $id ,,pmd git://github.com/jgm/peg-markdown.git ()
 
-updatetree `{cat portid} ,,pmd git://github.com/jgm/peg-markdown.git ()
-
-echo '*' prepare "previous version" ($previd)
-
-updatetree `{cat previd} ,,prevmd . all
+id=`{cat previd}
+echo '*' prepare "previous version" $id
+updatetree $id ,,prevmd . all
