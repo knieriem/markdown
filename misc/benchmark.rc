@@ -1,0 +1,69 @@
+#!/usr/local/plan9/bin/rc
+
+nrun=20
+
+fn timego{
+	run ./cmd/markdown go
+}
+fn timegoprev{
+	run ./,,prevmd/cmd/markdown goprev
+}
+
+fn timec{
+	run ,,pmd/markdown c
+}
+
+fn run{
+	xtime $1 < m  >[2=1] > /tmp/,,out.$2
+}
+
+fn xtime{
+#	/usr/bin/time -f '%Uu %Ss %er %MkB %C' $*
+	/usr/bin/time -f '%U %M' $*
+}
+
+fn cmpout{
+	if (! cmp /tmp/,,out.$1 /tmp/,,out.$2) {
+		echo not equal: $1 $2 >[1=2]
+		exit -1
+	}
+}
+
+{
+	start = 1
+	for (i in `{seq 1 $nrun}) {
+		echo `{timec} `{timego} `{timegoprev}
+		if (~ $start 1){
+			cmpout go c
+			cmpout go goprev
+			start = 0
+		}
+	}
+} | awk '
+	BEGIN {
+		pfx = "#"
+	}
+	{
+		tc = $1
+		mc = $2
+		tgo = $3
+		mgo = $4
+		tprev = $5
+		mprev = 46
+	}
+	{
+		print pfx, "c:", tc, "go:" tgo, "frac:",  tgo/tc, "go,prev:", tgo/tprev*100, " %", "mem:", mgo/mc
+	}
+	NR < 5 { next }
+	{
+		pfx = ""
+		csum += tc
+		gosum += tgo
+		goprevsum += tprev
+		n++
+	}
+	END {
+		print "SUM"
+		print "c:", csum, "go:", gosum, "n:", n, "frac", gosum/csum, gosum/goprevsum*100, " %"
+	}
+'

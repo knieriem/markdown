@@ -12,6 +12,14 @@ diff: ,,c
 
 orig-c-src/markdown_parser.leg: orig-c-src
 
+
+bmprepare:
+	rc ./misc/bmprepare.rc
+
+benchmark: m ,,pmd ,,prevmd
+	rc ./misc/benchmark.rc
+
+
 #
 # pprof
 #

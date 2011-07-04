@@ -1,0 +1,31 @@
+#!/usr/local/plan9/bin/rc
+
+flag e +
+
+fn updatetree{			# hg-id dir hg-url make-target
+	if (test -d $2) {
+		cd $2
+		if (! ~ `{hg id -n} $1) {
+			hg update $1
+			make $4
+		}
+		cd ..
+	}
+	if (! test -d $2) {
+		hg clone $3 $2
+		cd $2
+		hg update $1
+		make $4
+		cd ..
+	}
+	~ 0 0
+}
+
+
+echo '*' prepare original c-based peg-markdown ($portid)
+
+updatetree `{cat portid} ,,pmd git://github.com/jgm/peg-markdown.git ()
+
+echo '*' prepare "previous version" ($previd)
+
+updatetree `{cat previd} ,,prevmd . all
