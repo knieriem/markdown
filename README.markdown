@@ -82,7 +82,7 @@ Because of this, to make *markdown* installable using
 [knieriem/peg][] at github, if parser.leg has been changed. If
 a copy of this package has not yet been downloaded -- i.e. no
 directory `./peg` is present --, `make` will perform the
-neccessary steps automatically (run `make peg` to manually
+necessary  steps automatically (run `make peg` to manually
 download [knieriem/peg][]).
 
 To update [knieriem/peg][] run `gomake update-peg`. This will
