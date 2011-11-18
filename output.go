@@ -20,25 +20,24 @@ package markdown
 // HTML output functions
 
 import (
-	"os"
 	"fmt"
 	"log"
-	"rand"
+	"math/rand"
 	"strings"
 )
 
 type Writer interface {
-	WriteString(string) (int, os.Error)
-	WriteRune(int) (int, os.Error)
-	WriteByte(byte) os.Error
+	WriteString(string) (int, error)
+	WriteRune(int) (int, error)
+	WriteByte(byte) error
 }
 
 type htmlOut struct {
 	Writer
-	padded	int
+	padded int
 
-	notenum		int
-	endNotes	[]*element	/* List of endnotes to print after main content. */
+	notenum  int
+	endNotes []*element /* List of endnotes to print after main content. */
 }
 
 // WriteHtml prints a document tree in HTML format using the specified Writer.
@@ -75,7 +74,6 @@ func (w *htmlOut) s(s string) *htmlOut {
 	w.WriteString(s)
 	return w
 }
-
 
 /* print string, escaping for HTML  
  * If obfuscate selected, convert characters to hex or decimal entities at random
@@ -159,7 +157,7 @@ func (w *htmlOut) elem(elt *element, obfuscate bool) *htmlOut {
 		s = elt.contents.str
 	case LINK:
 		if strings.Index(elt.contents.link.url, "mailto:") == 0 {
-			obfuscate = true	/* obfuscate mailto: links */
+			obfuscate = true /* obfuscate mailto: links */
 		}
 		w.s(`<a href="`).str(elt.contents.link.url, obfuscate).s(`"`)
 		if len(elt.contents.link.title) > 0 {
@@ -183,7 +181,7 @@ func (w *htmlOut) elem(elt *element, obfuscate bool) *htmlOut {
 		/* Shouldn't occur - these are handled by process_raw_blocks() */
 		log.Fatalf("RAW")
 	case H1, H2, H3, H4, H5, H6:
-		h := "h" + string('1'+elt.key-H1) + ">"	/* assumes H1 ... H6 are in order */
+		h := "h" + string('1'+elt.key-H1) + ">" /* assumes H1 ... H6 are in order */
 		w.pad(2).s("<").s(h).elist(elt.children, obfuscate).s("</").s(h).pset(0)
 	case PLAIN:
 		w.pad(1).elist(elt.children, obfuscate).pset(0)
@@ -216,7 +214,7 @@ func (w *htmlOut) elem(elt *element, obfuscate bool) *htmlOut {
 		 * is a note block that has been incorporated into the notes list
 		 */
 		if elt.contents.str == "" {
-			w.endNotes = append(w.endNotes, elt)	/* add an endnote to global endnotes list */
+			w.endNotes = append(w.endNotes, elt) /* add an endnote to global endnotes list */
 			w.notenum++
 			nn := w.notenum
 			s = fmt.Sprintf(`<a class="noteref" id="fnref%d" href="#fn%d" title="Jump to note %d">[%d]</a>`,
@@ -230,7 +228,6 @@ func (w *htmlOut) elem(elt *element, obfuscate bool) *htmlOut {
 	}
 	return w
 }
-
 
 func (w *htmlOut) printEndnotes() {
 	counter := 0
