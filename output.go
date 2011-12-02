@@ -22,7 +22,7 @@ package markdown
 import (
 	"fmt"
 	"log"
-	"math/rand"
+	"rand"
 	"strings"
 )
 
