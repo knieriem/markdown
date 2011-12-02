@@ -22,14 +22,15 @@ package markdown
 import (
 	"fmt"
 	"log"
-	"math/rand"
+	"rand"
 	"strings"
+	"os"
 )
 
 type Writer interface {
-	WriteString(string) (int, error)
-	WriteRune(int) (int, error)
-	WriteByte(byte) error
+	WriteString(string) (int, os.Error)
+	WriteRune(int) (int, os.Error)
+	WriteByte(byte) os.Error
 }
 
 type htmlOut struct {
