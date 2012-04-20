@@ -1,9 +1,9 @@
 package main
 
 import (
-	"../_obj/github.com/knieriem/markdown"
 	"flag"
 	"fmt"
+	"github.com/knieriem/markdown"
 	"os"
 	"bufio"
 	"io/ioutil"

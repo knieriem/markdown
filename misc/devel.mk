@@ -1,3 +1,5 @@
+MD=./cmd/markdown/markdown
+
 #
 # development utilities
 #
@@ -24,9 +26,9 @@ benchmark: m ,,pmd ,,prevmd
 # pprof
 #
 pprof: cmd m
-	./cmd/markdown -cpuprofile /tmp/md.prof <m > /tmp/,,md.out
-	@echo gopprof \'--nodefraction=0.1\' ./cmd/markdown /tmp/md.prof
-	@echo gopprof ./cmd/markdown /tmp/md.prof
+	$(MD) -cpuprofile /tmp/md.prof <m > /tmp/,,md.out
+	@echo gopprof \'--nodefraction=0.1\' $(MD) /tmp/md.prof
+	@echo gopprof $(MD) /tmp/md.prof
 
 .PHONY:\
 	diff\

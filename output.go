@@ -28,7 +28,7 @@ import (
 
 type Writer interface {
 	WriteString(string) (int, error)
-	WriteRune(int) (int, error)
+	WriteRune(rune) (int, error)
 	WriteByte(byte) error
 }
 

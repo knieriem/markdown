@@ -1,12 +1,13 @@
 #!/usr/local/plan9/bin/rc
 
 nrun=20
+md=./cmd/markdown/markdown
 
 fn timego{
-	run ./cmd/markdown go
+	run $md go
 }
 fn timegoprev{
-	run ./,,prevmd/cmd/markdown goprev
+	run ./,,prevmd/src/github.com/knieriem/markdown/$md goprev
 }
 
 fn timec{

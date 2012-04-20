@@ -3,26 +3,28 @@
 flag e +
 
 fn updatetree{			# hg-id dir hg-url make-target
+	wd=`{pwd}
 	if (test -d $2) {
 		cd $2
 		if (! ~ `{hg id -n} $1) {
 			hg update $1
 			make $4
 		}
-		cd ..
+		cd $wd
 	}
 	if (! test -d $2) {
 		hg clone $3 $2
 		cd $2
 		hg update $1
 		make $4
-		cd ..
+		cd $wd
 	}
 	~ 0 0
 }
 
 test -f portid
 test -f previd
+mkdir -p ,,prevmd/src/github.com/knieriem
 
 id=`{cat portid}
 echo '*' prepare original c-based peg-markdown $id
@@ -30,4 +32,6 @@ updatetree $id ,,pmd git://github.com/jgm/peg-markdown.git ()
 
 id=`{cat previd}
 echo '*' prepare "previous version" $id
-updatetree $id ,,prevmd . all
+cd ,,prevmd
+GOPATH=`{pwd}
+updatetree $id src/github.com/knieriem/markdown .. cmd
