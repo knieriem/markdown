@@ -27,8 +27,8 @@ benchmark: m ,,pmd ,,prevmd
 #
 pprof: cmd m
 	$(MD) -cpuprofile /tmp/md.prof <m > /tmp/,,md.out
-	@echo gopprof \'--nodefraction=0.1\' $(MD) /tmp/md.prof
-	@echo gopprof $(MD) /tmp/md.prof
+	@echo go tool pprof \'--nodefraction=0.1\' $(MD) /tmp/md.prof
+	@echo go tool pprof $(MD) /tmp/md.prof
 
 .PHONY:\
 	diff\
