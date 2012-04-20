@@ -3,17 +3,16 @@ A translation of peg-markdown [1] into Go.
 
 Usage example:
 
+	package main
+
 	import (
-		md "markdown"
+		md "github.com/knieriem/markdown"
 		"os"
-		"io/ioutil"
 		"bufio"
 	)
 
 	func main() {
-		b, _ := ioutil.ReadAll(os.Stdin)
-
-		doc := md.Parse(string(b), md.Extensions{Smart: true})
+		doc := md.Parse(os.Stdin, md.Extensions{Smart: true})
 
 		w := bufio.NewWriter(os.Stdout)
 		doc.WriteHtml(w)	

@@ -5,13 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"github.com/knieriem/markdown"
-	"io/ioutil"
+	"log"
 	"os"
 )
 
 func main() {
-	var b []byte
-
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [FILE]\n", os.Args[0])
 		flag.PrintDefaults()
@@ -21,10 +19,14 @@ func main() {
 	optDlists := flag.Bool("dlists", false, "support definitions lists")
 	flag.Parse()
 
+	r := os.Stdin
 	if flag.NArg() > 0 {
-		b, _ = ioutil.ReadFile(flag.Arg(0))
-	} else {
-		b, _ = ioutil.ReadAll(os.Stdin)
+		f, err := os.Open(flag.Arg(0))
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer f.Close()
+		r = f
 	}
 
 	e := markdown.Extensions{
@@ -36,7 +38,7 @@ func main() {
 	startPProf()
 	defer stopPProf()
 
-	doc := markdown.Parse(string(b), e)
+	doc := markdown.Parse(r, e)
 	w := bufio.NewWriter(os.Stdout)
 	doc.WriteHtml(w)
 	w.Flush()

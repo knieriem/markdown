@@ -21,6 +21,7 @@ package markdown
 
 import (
 	"bytes"
+	"io"
 	"log"
 	"strings"
 )
@@ -35,7 +36,7 @@ type Extensions struct {
 }
 
 // Parse converts a Markdown document into a tree for later output processing.
-func Parse(text string, ext Extensions) *Doc {
+func Parse(r io.Reader, ext Extensions) *Doc {
 	d := new(Doc)
 	d.extension = ext
 
@@ -43,7 +44,7 @@ func Parse(text string, ext Extensions) *Doc {
 	d.parser.Doc = d
 	d.parser.Init()
 
-	s := preformat(text)
+	s := preformat(r)
 
 	d.parseRule(ruleReferences, s)
 	if ext.Notes {
@@ -109,31 +110,39 @@ const (
 /* preformat - allocate and copy text buffer while
  * performing tab expansion.
  */
-func preformat(text string) (s string) {
+func preformat(r io.Reader) (s string) {
 	charstotab := TABSTOP
-	i0 := 0
+	buf := make([]byte, 32768)
 
-	b := bytes.NewBuffer(make([]byte, 0, len(text)+256))
-	for i, _ := range text {
-		switch text[i] {
-		case '\t':
-			b.WriteString(text[i0:i])
-			for ; charstotab > 0; charstotab-- {
-				b.WriteByte(' ')
+	b := bytes.NewBuffer(make([]byte, 0, 32768))
+	for {
+		n, err := r.Read(buf)
+		if err != nil {
+			break
+		}
+		i0 := 0
+		for i := range buf[:n] {
+			switch buf[i] {
+			case '\t':
+				b.Write(buf[i0:i])
+				for ; charstotab > 0; charstotab-- {
+					b.WriteByte(' ')
+				}
+				i0 = i + 1
+			case '\n':
+				b.Write(buf[i0 : i+1])
+				i0 = i + 1
+				charstotab = TABSTOP
+			default:
+				charstotab--
 			}
-			i0 = i + 1
-		case '\n':
-			b.WriteString(text[i0 : i+1])
-			i0 = i + 1
-			charstotab = TABSTOP
-		default:
-			charstotab--
+			if charstotab == 0 {
+				charstotab = TABSTOP
+			}
 		}
-		if charstotab == 0 {
-			charstotab = TABSTOP
-		}
+		b.Write(buf[i0:n])
 	}
-	b.WriteString(text[i0:])
+
 	b.WriteString("\n\n")
 	return b.String()
 }
