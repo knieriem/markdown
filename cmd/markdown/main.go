@@ -1,13 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"github.com/knieriem/markdown"
-	"os"
-	"bufio"
 	"io/ioutil"
 	"log"
+	"os"
 	"runtime/pprof"
 )
 
@@ -32,8 +32,8 @@ func main() {
 	}
 
 	e := markdown.Extensions{
-		Notes: *optNotes,
-		Smart: *optSmart,
+		Notes:  *optNotes,
+		Smart:  *optSmart,
 		Dlists: *optDlists,
 	}
 

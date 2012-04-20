@@ -20,20 +20,19 @@ package markdown
 // implements Parse()
 
 import (
-	"strings"
 	"bytes"
 	"log"
+	"strings"
 )
 
 // Markdown Extensions:
 type Extensions struct {
-	Smart			bool
-	Notes			bool
-	FilterHTML		bool
-	FilterStyles	bool
-	Dlists			bool
+	Smart        bool
+	Notes        bool
+	FilterHTML   bool
+	FilterStyles bool
+	Dlists       bool
 }
-
 
 // Parse converts a Markdown document into a tree for later output processing.
 func Parse(text string, ext Extensions) *Doc {
@@ -70,7 +69,6 @@ func (d *Doc) parseMarkdown(text string) *element {
 	return d.tree
 }
 
-
 /* process_raw_blocks - traverses an element list, replacing any RAW elements with
  * the result of parsing them as markdown text, and recursing into the children
  * of parent elements.  The result should be a tree of elements without any RAWs.
@@ -103,7 +101,6 @@ func (d *Doc) processRawBlocks(input *element) *element {
 	}
 	return input
 }
-
 
 const (
 	TABSTOP = 4
