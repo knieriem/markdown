@@ -864,17 +864,6 @@ func reverse(list *element) (new *element) {
 	return
 }
 
-/* concat_string_list - concatenates string contents of list of STR elements.
- */
-func concat_string_list(list *element) string {
-	s := ""
-	for list != nil {
-		s += list.contents.str
-		list = list.next
-	}
-	return s
-}
-
 
 /*
  *  Auxiliary functions for parsing actions.
@@ -912,7 +901,11 @@ func mk_str(s string) (result *element) {
  * reversed list of strings, adding optional extra newline
  */
 func mk_str_from_list(list *element, extra_newline bool) (result *element) {
-	s := concat_string_list(reverse(list))
+	s := ""
+	for list = reverse(list); list != nil; list = list.next {
+		s += list.contents.str
+	}
+
 	if extra_newline {
 		s += "\n"
 	}
