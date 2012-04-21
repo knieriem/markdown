@@ -925,18 +925,18 @@ func mk_str_from_list(list *element, extra_newline bool) (result *element) {
  * This is designed to be used with cons to build lists in a parser action.
  * The reversing is necessary because cons adds to the head of a list.
  */
-func mk_list(key int, lst *element) *element {
-	result := mk_element(key)
-	result.children = reverse(lst)
-	return result
+func mk_list(key int, lst *element) (el *element) {
+	el = mk_element(key)
+	el.children = reverse(lst)
+	return
 }
 
 /* mk_link - constructor for LINK element
  */
-func mk_link(label *element, url, title string) *element {
-	result := mk_element(LINK)
-	result.contents.link = &link{label: label, url: url, title: title}
-	return result
+func mk_link(label *element, url, title string) (el *element) {
+	el = mk_element(LINK)
+	el.contents.link = &link{label: label, url: url, title: title}
+	return
 }
 
 
