@@ -92,7 +92,7 @@ const (
 
 type Doc struct {
 	parser		*yyParser
-	extension	Extensions
+	extension	Options
 
 	tree				*element	/* Results of parse. */
 	references			*element	/* List of link references found. */

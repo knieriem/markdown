@@ -10,13 +10,15 @@ import (
 )
 
 func main() {
+	var opt markdown.Options
+	flag.BoolVar(&opt.Notes, "notes", false, "turn on footnote syntax")
+	flag.BoolVar(&opt.Smart, "smart", false, "turn on smart quotes, dashes, and ellipses")
+	flag.BoolVar(&opt.Dlists, "dlists", false, "support definitions lists")
+
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [FILE]\n", os.Args[0])
 		flag.PrintDefaults()
 	}
-	optNotes := flag.Bool("notes", false, "turn on footnote syntax")
-	optSmart := flag.Bool("smart", false, "turn on smart quotes, dashes, and ellipses")
-	optDlists := flag.Bool("dlists", false, "support definitions lists")
 	flag.Parse()
 
 	r := os.Stdin
@@ -29,16 +31,10 @@ func main() {
 		r = f
 	}
 
-	e := markdown.Extensions{
-		Notes:  *optNotes,
-		Smart:  *optSmart,
-		Dlists: *optDlists,
-	}
-
 	startPProf()
 	defer stopPProf()
 
-	doc := markdown.Parse(r, e)
+	doc := markdown.Parse(r, opt)
 	w := bufio.NewWriter(os.Stdout)
 	doc.WriteHtml(w)
 	w.Flush()

@@ -12,7 +12,7 @@ Usage example:
 	)
 
 	func main() {
-		doc := md.Parse(os.Stdin, md.Extensions{Smart: true})
+		doc := md.Parse(os.Stdin, md.Options{Smart: true})
 
 		w := bufio.NewWriter(os.Stdout)
 		doc.WriteHtml(w)	

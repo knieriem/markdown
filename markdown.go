@@ -26,8 +26,8 @@ import (
 	"strings"
 )
 
-// Markdown Extensions:
-type Extensions struct {
+// Markdown Options:
+type Options struct {
 	Smart        bool
 	Notes        bool
 	FilterHTML   bool
@@ -36,9 +36,9 @@ type Extensions struct {
 }
 
 // Parse converts a Markdown document into a tree for later output processing.
-func Parse(r io.Reader, ext Extensions) *Doc {
+func Parse(r io.Reader, opt Options) *Doc {
 	d := new(Doc)
-	d.extension = ext
+	d.extension = opt
 
 	d.parser = new(yyParser)
 	d.parser.Doc = d
@@ -47,7 +47,7 @@ func Parse(r io.Reader, ext Extensions) *Doc {
 	s := preformat(r)
 
 	d.parseRule(ruleReferences, s)
-	if ext.Notes {
+	if opt.Notes {
 		d.parseRule(ruleNotes, s)
 	}
 	raw := d.parseMarkdown(s)
