@@ -22,6 +22,7 @@ package markdown
 
 import (
 	"fmt"
+	"io"
 	"strings"
 	"log"
 	"sync"
@@ -992,24 +993,24 @@ func (d *Doc) find_note(label string) (*element, bool) {
 
 /* print tree of elements, for debugging only.
  */
-func print_tree(elt *element, indent int) {
+func print_tree(w io.Writer, elt *element, indent int) {
 	var key string
 
 	for elt != nil {
 		for i := 0; i < indent; i++ {
-			fmt.Print("\t")
+			fmt.Fprint(w, "\t")
 		}
 		key = keynames[elt.key]
 		if key == "" {
 			key = "?"
 		}
 		if elt.key == STR {
-			fmt.Printf("%p:\t%s\t'%s'\n", elt, key, elt.contents.str)
+			fmt.Fprintf(w, "%p:\t%s\t'%s'\n", elt, key, elt.contents.str)
 		} else {
-			fmt.Printf("%p:\t%s %p\n", elt, key, elt.next)
+			fmt.Fprintf(w, "%p:\t%s %p\n", elt, key, elt.next)
 		}
 		if elt.children != nil {
-			print_tree(elt.children, indent+1)
+			print_tree(w, elt.children, indent+1)
 		}
 		elt = elt.next
 	}
