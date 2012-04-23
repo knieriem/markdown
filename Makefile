@@ -30,7 +30,7 @@ nuke:
 ifeq ($(MAKECMDGOALS),parser)
 include $(shell go list -f '{{.Dir}}' github.com/knieriem/peg)/Make.inc
 %.leg.go: %.leg $(LEG)
-	$(LEG) -switch $<
+	$(LEG) -verbose -switch -O all $< > $@
 
 endif
 

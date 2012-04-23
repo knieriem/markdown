@@ -60,8 +60,8 @@ func (d *Doc) parseRule(rule int, s string) {
 	if m.ResetBuffer(s) != "" {
 		log.Fatalf("Buffer not empty")
 	}
-	if !m.Parse(rule) {
-		m.PrintError()
+	if err := m.Parse(rule); err != nil {
+		log.Fatalln("markdown:", err)
 	}
 }
 
