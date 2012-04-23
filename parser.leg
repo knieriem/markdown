@@ -811,7 +811,7 @@ DefinitionList = &{ p.extension.Dlists }
 			( Definition { a = cons($$, a) } )+ 
 			{ $$ = mk_list(DEFINITIONLIST, a) }
 
-Definition =	&( (!Defmark RawLine)+ BlankLine? Defmark)
+Definition =	&( (NonindentSpace !Defmark Nonspacechar RawLine) BlankLine? Defmark)
 			a:StartList
 			( DListTitle { a = cons($$, a) } )+
 			( DefTight | DefLoose ) {
