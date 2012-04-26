@@ -119,6 +119,19 @@ func (w *htmlOut) str(s string) *htmlOut {
 	return w
 }
 
+func (w *htmlOut) children(el *element) *htmlOut {
+	return w.elist(el.children)
+}
+func (w *htmlOut) inline(tag string, el *element) *htmlOut {
+	return w.s(tag).children(el).s("</").s(tag[1:])
+}
+func (w *htmlOut) listBlock(tag string, el *element) *htmlOut {
+	return w.pad(2).s(tag).pset(0).elist(el.children).pad(1).s("</").s(tag[1:]).pset(0)
+}
+func (w *htmlOut) listItem(tag string, el *element) *htmlOut {
+	return w.pad(1).s(tag).pset(2).elist(el.children).s("</").s(tag[1:]).pset(0)
+}
+
 /* print a list of elements
  */
 func (w *htmlOut) elist(list *element) *htmlOut {
@@ -149,9 +162,9 @@ func (w *htmlOut) elem(elt *element) *htmlOut {
 	case APOSTROPHE:
 		s = "&rsquo;"
 	case SINGLEQUOTED:
-		w.s("&lsquo;").elist(elt.children).s("&rsquo;")
+		w.s("&lsquo;").children(elt).s("&rsquo;")
 	case DOUBLEQUOTED:
-		w.s("&ldquo;").elist(elt.children).s("&rdquo;")
+		w.s("&ldquo;").children(elt).s("&rdquo;")
 	case CODE:
 		w.s("<code>").str(elt.contents.str).s("</code>")
 	case HTML:
@@ -175,21 +188,21 @@ func (w *htmlOut) elem(elt *element) *htmlOut {
 		}
 		w.s(" />")
 	case EMPH:
-		w.s("<em>").elist(elt.children).s("</em>")
+		w.inline("<em>", elt)
 	case STRONG:
-		w.s("<strong>").elist(elt.children).s("</strong>")
+		w.inline("<strong>", elt)
 	case LIST:
-		w.elist(elt.children)
+		w.children(elt)
 	case RAW:
 		/* Shouldn't occur - these are handled by process_raw_blocks() */
 		log.Fatalf("RAW")
 	case H1, H2, H3, H4, H5, H6:
-		h := "h" + string('1'+elt.key-H1) + ">" /* assumes H1 ... H6 are in order */
-		w.pad(2).s("<").s(h).elist(elt.children).s("</").s(h).pset(0)
+		h := "<h" + string('1'+elt.key-H1) + ">" /* assumes H1 ... H6 are in order */
+		w.pad(2).inline(h, elt).pset(0)
 	case PLAIN:
-		w.pad(1).elist(elt.children).pset(0)
+		w.pad(1).children(elt).pset(0)
 	case PARA:
-		w.pad(2).s("<p>").elist(elt.children).s("</p>").pset(0)
+		w.pad(2).inline("<p>", elt).pset(0)
 	case HRULE:
 		w.pad(2).s("<hr />").pset(0)
 	case HTMLBLOCK:
@@ -197,19 +210,19 @@ func (w *htmlOut) elem(elt *element) *htmlOut {
 	case VERBATIM:
 		w.pad(2).s("<pre><code>").str(elt.contents.str).s("</code></pre>").pset(0)
 	case BULLETLIST:
-		w.pad(2).s("<ul>").pset(0).elist(elt.children).pad(1).s("</ul>").pset(0)
+		w.listBlock("<ul>", elt)
 	case ORDEREDLIST:
-		w.pad(2).s("<ol>").pset(0).elist(elt.children).pad(1).s("</ol>").pset(0)
+		w.listBlock("<ol>", elt)
 	case DEFINITIONLIST:
-		w.pad(2).s("<dl>").pset(0).elist(elt.children).pad(1).s("</dl>").pset(0)
+		w.listBlock("<dl>", elt)
 	case DEFTITLE:
-		w.pad(1).s("<dt>").pset(2).elist(elt.children).s("</dt>").pset(0)
+		w.listItem("<dt>", elt)
 	case DEFDATA:
-		w.pad(1).s("<dd>").pset(2).elist(elt.children).s("</dd>").pset(0)
+		w.listItem("<dd>", elt)
 	case LISTITEM:
-		w.pad(1).s("<li>").pset(2).elist(elt.children).s("</li>").pset(0)
+		w.listItem("<li>", elt)
 	case BLOCKQUOTE:
-		w.pad(2).s("<blockquote>\n").pset(2).elist(elt.children).pad(1).s("</blockquote>").pset(0)
+		w.pad(2).s("<blockquote>\n").pset(2).children(elt).pad(1).s("</blockquote>").pset(0)
 	case REFERENCE:
 		/* Nonprinting */
 	case NOTE:
@@ -239,7 +252,7 @@ func (w *htmlOut) printEndnotes() {
 	for _, elt := range w.endNotes {
 		counter++
 		w.pad(1).s(fmt.Sprintf("<li id=\"fn%d\">\n", counter)).pset(2)
-		w.elist(elt.children)
+		w.children(elt)
 		w.s(fmt.Sprintf(" <a href=\"#fnref%d\" title=\"Jump back to reference\">[back]</a>", counter))
 		w.pad(1).s("</li>")
 	}
