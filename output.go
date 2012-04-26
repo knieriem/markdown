@@ -95,7 +95,7 @@ func (w *htmlOut) str(s string) *htmlOut {
 			ws = "&quot;"
 		default:
 			if w.obfuscate {
-				if rand.Intn(1) == 0 {
+				if rand.Intn(2) == 0 {
 					ws = fmt.Sprintf("&#%d;", r)
 				} else {
 					ws = fmt.Sprintf("&#%x;", r)
