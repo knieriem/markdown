@@ -35,6 +35,7 @@ type Writer interface {
 type htmlOut struct {
 	Writer
 	padded int
+	obfuscate bool
 
 	notenum  int
 	endNotes []*element /* List of endnotes to print after main content. */
@@ -46,7 +47,7 @@ func (d *Doc) WriteHtml(w Writer) int {
 	out := new(htmlOut)
 	out.Writer = w
 	out.padded = 2
-	out.elist(d.tree, false)
+	out.elist(d.tree)
 	if len(out.endNotes) != 0 {
 		out.pad(2)
 		out.printEndnotes()
@@ -78,7 +79,7 @@ func (w *htmlOut) s(s string) *htmlOut {
 /* print string, escaping for HTML  
  * If obfuscate selected, convert characters to hex or decimal entities at random
  */
-func (w *htmlOut) str(s string, obfuscate bool) *htmlOut {
+func (w *htmlOut) str(s string) *htmlOut {
 	var ws string
 	var i0 = 0
 
@@ -93,7 +94,7 @@ func (w *htmlOut) str(s string, obfuscate bool) *htmlOut {
 		case '"':
 			ws = "&quot;"
 		default:
-			if obfuscate {
+			if w.obfuscate {
 				if rand.Intn(1) == 0 {
 					ws = fmt.Sprintf("&#%d;", r)
 				} else {
@@ -120,16 +121,16 @@ func (w *htmlOut) str(s string, obfuscate bool) *htmlOut {
 
 /* print a list of elements
  */
-func (w *htmlOut) elist(list *element, obfuscate bool) *htmlOut {
+func (w *htmlOut) elist(list *element) *htmlOut {
 	for list != nil {
-		w.elem(list, obfuscate)
+		w.elem(list)
 		list = list.next
 	}
 	return w
 }
 
 // print an element
-func (w *htmlOut) elem(elt *element, obfuscate bool) *htmlOut {
+func (w *htmlOut) elem(elt *element) *htmlOut {
 	var s string
 
 	switch elt.key {
@@ -138,7 +139,7 @@ func (w *htmlOut) elem(elt *element, obfuscate bool) *htmlOut {
 	case LINEBREAK:
 		s = "<br/>\n"
 	case STR:
-		w.str(elt.contents.str, obfuscate)
+		w.str(elt.contents.str)
 	case ELLIPSIS:
 		s = "&hellip;"
 	case EMDASH:
@@ -148,65 +149,67 @@ func (w *htmlOut) elem(elt *element, obfuscate bool) *htmlOut {
 	case APOSTROPHE:
 		s = "&rsquo;"
 	case SINGLEQUOTED:
-		w.s("&lsquo;").elist(elt.children, obfuscate).s("&rsquo;")
+		w.s("&lsquo;").elist(elt.children).s("&rsquo;")
 	case DOUBLEQUOTED:
-		w.s("&ldquo;").elist(elt.children, obfuscate).s("&rdquo;")
+		w.s("&ldquo;").elist(elt.children).s("&rdquo;")
 	case CODE:
-		w.s("<code>").str(elt.contents.str, obfuscate).s("</code>")
+		w.s("<code>").str(elt.contents.str).s("</code>")
 	case HTML:
 		s = elt.contents.str
 	case LINK:
+		o := w.obfuscate
 		if strings.Index(elt.contents.link.url, "mailto:") == 0 {
-			obfuscate = true /* obfuscate mailto: links */
+			w.obfuscate = true /* obfuscate mailto: links */
 		}
-		w.s(`<a href="`).str(elt.contents.link.url, obfuscate).s(`"`)
+		w.s(`<a href="`).str(elt.contents.link.url).s(`"`)
 		if len(elt.contents.link.title) > 0 {
-			w.s(` title="`).str(elt.contents.link.title, obfuscate).s(`"`)
+			w.s(` title="`).str(elt.contents.link.title).s(`"`)
 		}
-		w.s(">").elist(elt.contents.link.label, obfuscate).s("</a>")
+		w.s(">").elist(elt.contents.link.label).s("</a>")
+		w.obfuscate = o
 	case IMAGE:
-		w.s(`<img src="`).str(elt.contents.link.url, obfuscate).s(`" alt="`)
-		w.elist(elt.contents.link.label, obfuscate).s(`"`)
+		w.s(`<img src="`).str(elt.contents.link.url).s(`" alt="`)
+		w.elist(elt.contents.link.label).s(`"`)
 		if len(elt.contents.link.title) > 0 {
-			w.s(` title="`).str(elt.contents.link.title, obfuscate).s(`"`)
+			w.s(` title="`).str(elt.contents.link.title).s(`"`)
 		}
 		w.s(" />")
 	case EMPH:
-		w.s("<em>").elist(elt.children, obfuscate).s("</em>")
+		w.s("<em>").elist(elt.children).s("</em>")
 	case STRONG:
-		w.s("<strong>").elist(elt.children, obfuscate).s("</strong>")
+		w.s("<strong>").elist(elt.children).s("</strong>")
 	case LIST:
-		w.elist(elt.children, obfuscate)
+		w.elist(elt.children)
 	case RAW:
 		/* Shouldn't occur - these are handled by process_raw_blocks() */
 		log.Fatalf("RAW")
 	case H1, H2, H3, H4, H5, H6:
 		h := "h" + string('1'+elt.key-H1) + ">" /* assumes H1 ... H6 are in order */
-		w.pad(2).s("<").s(h).elist(elt.children, obfuscate).s("</").s(h).pset(0)
+		w.pad(2).s("<").s(h).elist(elt.children).s("</").s(h).pset(0)
 	case PLAIN:
-		w.pad(1).elist(elt.children, obfuscate).pset(0)
+		w.pad(1).elist(elt.children).pset(0)
 	case PARA:
-		w.pad(2).s("<p>").elist(elt.children, obfuscate).s("</p>").pset(0)
+		w.pad(2).s("<p>").elist(elt.children).s("</p>").pset(0)
 	case HRULE:
 		w.pad(2).s("<hr />").pset(0)
 	case HTMLBLOCK:
 		w.pad(2).s(elt.contents.str).pset(0)
 	case VERBATIM:
-		w.pad(2).s("<pre><code>").str(elt.contents.str, obfuscate).s("</code></pre>").pset(0)
+		w.pad(2).s("<pre><code>").str(elt.contents.str).s("</code></pre>").pset(0)
 	case BULLETLIST:
-		w.pad(2).s("<ul>").pset(0).elist(elt.children, obfuscate).pad(1).s("</ul>").pset(0)
+		w.pad(2).s("<ul>").pset(0).elist(elt.children).pad(1).s("</ul>").pset(0)
 	case ORDEREDLIST:
-		w.pad(2).s("<ol>").pset(0).elist(elt.children, obfuscate).pad(1).s("</ol>").pset(0)
+		w.pad(2).s("<ol>").pset(0).elist(elt.children).pad(1).s("</ol>").pset(0)
 	case DEFINITIONLIST:
-		w.pad(2).s("<dl>").pset(0).elist(elt.children, obfuscate).pad(1).s("</dl>").pset(0)
+		w.pad(2).s("<dl>").pset(0).elist(elt.children).pad(1).s("</dl>").pset(0)
 	case DEFTITLE:
-		w.pad(1).s("<dt>").pset(2).elist(elt.children, obfuscate).s("</dt>").pset(0)
+		w.pad(1).s("<dt>").pset(2).elist(elt.children).s("</dt>").pset(0)
 	case DEFDATA:
-		w.pad(1).s("<dd>").pset(2).elist(elt.children, obfuscate).s("</dd>").pset(0)
+		w.pad(1).s("<dd>").pset(2).elist(elt.children).s("</dd>").pset(0)
 	case LISTITEM:
-		w.pad(1).s("<li>").pset(2).elist(elt.children, obfuscate).s("</li>").pset(0)
+		w.pad(1).s("<li>").pset(2).elist(elt.children).s("</li>").pset(0)
 	case BLOCKQUOTE:
-		w.pad(2).s("<blockquote>\n").pset(2).elist(elt.children, obfuscate).pad(1).s("</blockquote>").pset(0)
+		w.pad(2).s("<blockquote>\n").pset(2).elist(elt.children).pad(1).s("</blockquote>").pset(0)
 	case REFERENCE:
 		/* Nonprinting */
 	case NOTE:
@@ -236,7 +239,7 @@ func (w *htmlOut) printEndnotes() {
 	for _, elt := range w.endNotes {
 		counter++
 		w.pad(1).s(fmt.Sprintf("<li id=\"fn%d\">\n", counter)).pset(2)
-		w.elist(elt.children, false)
+		w.elist(elt.children)
 		w.s(fmt.Sprintf(" <a href=\"#fnref%d\" title=\"Jump back to reference\">[back]</a>", counter))
 		w.pad(1).s("</li>")
 	}
