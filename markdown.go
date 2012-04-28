@@ -143,6 +143,6 @@ func preformat(r io.Reader) (s string) {
 		b.Write(buf[i0:n])
 	}
 
-	b.WriteString("\n\n")
+	b.WriteString("\n")
 	return b.String()
 }
