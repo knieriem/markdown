@@ -6,16 +6,16 @@ Usage example:
 	package main
 
 	import (
-		md "github.com/knieriem/markdown"
+		"github.com/knieriem/markdown"
 		"os"
 		"bufio"
 	)
 
 	func main() {
-		doc := md.Parse(os.Stdin, md.Options{Smart: true})
+		p := markdown.NewParser(&markdown.Options{Smart: true})
 
 		w := bufio.NewWriter(os.Stdout)
-		doc.WriteHtml(w)	
+		p.Markdown(os.Stdin, markdown.ToHTML(w))
 		w.Flush()
 	}
 

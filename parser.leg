@@ -91,10 +91,8 @@ const (
 	numVAL
 )
 
-type Doc struct {
-	parser		*yyParser
-	extension	Options
-
+type state struct {
+	extension		Options
 	tree				*element	/* Results of parse. */
 	references			*element	/* List of link references found. */
 	notes				*element	/* List of footnotes found. */
@@ -102,13 +100,17 @@ type Doc struct {
 
 %}
 
-%userstate *Doc
+%userstate state
+
+%noexport
 
 %YYSTYPE *element
 
 Doc =       a:StartList ( Block { a = cons($$, a) } )*
             { p.tree = reverse(a) }
             commit
+
+Docblock = Block { p.tree = $$ } commit
 
 Block =     BlankLine*
             ( BlockQuote
@@ -965,8 +967,8 @@ func match_inlines(l1, l2 *element) bool {
 /* find_reference - return true if link found in references matching label.
  * 'link' is modified with the matching url and title.
  */
-func (d *Doc) findReference(label *element) (*link, bool) {
-	for cur := d.references; cur != nil; cur = cur.next {
+func (p *yyParser) findReference(label *element) (*link, bool) {
+	for cur := p.references; cur != nil; cur = cur.next {
 		l := cur.contents.link
 		if match_inlines(label, l.label) {
 			return l, true
@@ -979,8 +981,8 @@ func (d *Doc) findReference(label *element) (*link, bool) {
 /* find_note - return true if note found in notes matching label.
  * if found, 'result' is set to point to matched note.
  */
-func (d *Doc) find_note(label string) (*element, bool) {
-	for el := d.notes; el != nil; el = el.next {
+func (p *yyParser) find_note(label string) (*element, bool) {
+	for el := p.notes; el != nil; el = el.next {
 		if label == el.contents.str {
 			return el, true
 		}

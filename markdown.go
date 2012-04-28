@@ -17,8 +17,6 @@
 
 package markdown
 
-// implements Parse()
-
 import (
 	"bytes"
 	"io"
@@ -35,46 +33,73 @@ type Options struct {
 	Dlists       bool
 }
 
-// Parse converts a Markdown document into a tree for later output processing.
-func Parse(r io.Reader, opt Options) *Doc {
-	d := new(Doc)
-	d.extension = opt
-
-	d.parser = new(yyParser)
-	d.parser.Doc = d
-	d.parser.Init()
-
-	s := preformat(r)
-
-	d.parseRule(ruleReferences, s)
-	if opt.Notes {
-		d.parseRule(ruleNotes, s)
-	}
-	raw := d.parseMarkdown(s)
-	d.tree = d.processRawBlocks(raw)
-	return d
+type Parser struct {
+	yy           yyParser
+	preformatBuf *bytes.Buffer
 }
 
-func (d *Doc) parseRule(rule int, s string) {
-	m := d.parser
-	if m.ResetBuffer(s) != "" {
+// NewParser creates an instance of a parser. It can be reused
+// so that stacks and buffers need not be allocated anew for
+// each Markdown call.
+func NewParser(opt *Options) (p *Parser) {
+	p = new(Parser)
+	if opt != nil {
+		p.yy.state.extension = *opt
+	}
+	p.yy.Init()
+	p.preformatBuf = bytes.NewBuffer(make([]byte, 0, 32768))
+	return
+}
+
+type Formatter interface {
+	FormatBlock(*element)
+	Finish()
+}
+
+// Markdown parses input from an io.Reader into a tree, and sends
+// parsed blocks to a Formatter
+func (p *Parser) Markdown(src io.Reader, f Formatter) {
+	s := p.preformat(src)
+
+	p.parseRule(ruleReferences, s)
+	if p.yy.extension.Notes {
+		p.parseRule(ruleNotes, s)
+	}
+
+L:
+	for {
+		tree := p.parseRule(ruleDocblock, s)
+		s = p.yy.ResetBuffer("")
+		tree = p.processRawBlocks(tree)
+		f.FormatBlock(tree)
+		switch s {
+		case "", "\n", "\n\n":
+			break L
+		}
+	}
+	f.Finish()
+}
+
+func (p *Parser) parseRule(rule int, s string) (tree *element) {
+	if p.yy.ResetBuffer(s) != "" {
 		log.Fatalf("Buffer not empty")
 	}
-	if err := m.Parse(rule); err != nil {
+	if err := p.yy.Parse(rule); err != nil {
 		log.Fatalln("markdown:", err)
 	}
-}
-
-func (d *Doc) parseMarkdown(text string) *element {
-	d.parseRule(ruleDoc, text)
-	return d.tree
+	switch rule {
+	case ruleDoc, ruleDocblock:
+		tree = p.yy.state.tree
+		p.yy.state.tree = nil
+	}
+	return
 }
 
 /* process_raw_blocks - traverses an element list, replacing any RAW elements with
  * the result of parsing them as markdown text, and recursing into the children
  * of parent elements.  The result should be a tree of elements without any RAWs.
  */
-func (d *Doc) processRawBlocks(input *element) *element {
+func (p *Parser) processRawBlocks(input *element) *element {
 
 	for current := input; current != nil; current = current.next {
 		if current.key == RAW {
@@ -86,7 +111,7 @@ func (d *Doc) processRawBlocks(input *element) *element {
 			current.children = nil
 			listEnd := &current.children
 			for _, contents := range strings.Split(current.contents.str, "\001") {
-				if list := d.parseMarkdown(contents); list != nil {
+				if list := p.parseRule(ruleDoc, contents); list != nil {
 					*listEnd = list
 					for list.next != nil {
 						list = list.next
@@ -97,7 +122,7 @@ func (d *Doc) processRawBlocks(input *element) *element {
 			current.contents.str = ""
 		}
 		if current.children != nil {
-			current.children = d.processRawBlocks(current.children)
+			current.children = p.processRawBlocks(current.children)
 		}
 	}
 	return input
@@ -110,11 +135,12 @@ const (
 /* preformat - allocate and copy text buffer while
  * performing tab expansion.
  */
-func preformat(r io.Reader) (s string) {
+func (p *Parser) preformat(r io.Reader) (s string) {
 	charstotab := TABSTOP
 	buf := make([]byte, 32768)
 
-	b := bytes.NewBuffer(make([]byte, 0, 32768))
+	b := p.preformatBuf
+	b.Reset()
 	for {
 		n, err := r.Read(buf)
 		if err != nil {

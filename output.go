@@ -27,6 +27,7 @@ import (
 )
 
 type Writer interface {
+	Write([]byte) (int, error)
 	WriteString(string) (int, error)
 	WriteRune(rune) (int, error)
 	WriteByte(byte) error
@@ -34,26 +35,28 @@ type Writer interface {
 
 type htmlOut struct {
 	Writer
-	padded int
+	padded    int
 	obfuscate bool
 
 	notenum  int
 	endNotes []*element /* List of endnotes to print after main content. */
 }
 
-// WriteHtml prints a document tree in HTML format using the specified Writer.
-//
-func (d *Doc) WriteHtml(w Writer) int {
-	out := new(htmlOut)
-	out.Writer = w
-	out.padded = 2
-	out.elist(d.tree)
-	if len(out.endNotes) != 0 {
-		out.pad(2)
-		out.printEndnotes()
+func ToHTML(w Writer) Formatter {
+	f := new(htmlOut)
+	f.Writer = w
+	f.padded = 2
+	return f
+}
+func (f *htmlOut) FormatBlock(tree *element) {
+	f.elist(tree)
+}
+func (f *htmlOut) Finish() {
+	if len(f.endNotes) != 0 {
+		f.pad(2)
+		f.printEndnotes()
 	}
-	out.WriteByte('\n')
-	return 0
+	f.WriteByte('\n')
 }
 
 // pad - add newlines if needed

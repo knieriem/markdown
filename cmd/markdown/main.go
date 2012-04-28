@@ -31,11 +31,12 @@ func main() {
 		r = f
 	}
 
+	p := markdown.NewParser(&opt)
+
 	startPProf()
 	defer stopPProf()
 
-	doc := markdown.Parse(r, opt)
 	w := bufio.NewWriter(os.Stdout)
-	doc.WriteHtml(w)
+	p.Markdown(r, markdown.ToHTML(w))
 	w.Flush()
 }
