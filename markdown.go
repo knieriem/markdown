@@ -47,6 +47,7 @@ func NewParser(opt *Options) (p *Parser) {
 		p.yy.state.extension = *opt
 	}
 	p.yy.Init()
+	p.yy.state.heap.init(1024)
 	p.preformatBuf = bytes.NewBuffer(make([]byte, 0, 32768))
 	return
 }
@@ -65,6 +66,7 @@ func (p *Parser) Markdown(src io.Reader, f Formatter) {
 	if p.yy.extension.Notes {
 		p.parseRule(ruleNotes, s)
 	}
+	savedPos := p.yy.state.heap.Pos()
 
 L:
 	for {
@@ -76,6 +78,7 @@ L:
 		case "", "\n", "\r\n", "\n\n", "\r\n\n", "\n\n\n", "\r\n\n\n":
 			break L
 		}
+		p.yy.state.heap.setPos(savedPos)
 	}
 	f.Finish()
 }
