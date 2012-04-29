@@ -22,7 +22,7 @@ concatenating ten [Markdown syntax descriptions][syntax].
 
   [syntax]: http://daringfireball.net/projects/markdown/syntax.text
 
-The C version is still around 1.9x faster than the Go version.
+The C version is still around 1.2x faster than the Go version.
 
 
 ## Installation
@@ -104,9 +104,5 @@ As definition item markers both `:` and `~` can be used.
 
 ## Subdirectory Index
 
-*	peg – PEG parser generator (modified) from Andrew J Snodgrass
-
-*	peg/leg – LEG parser generator, based on PEG
-
-*	cmd	– command line program `markdown`
+*	cmd/markdown	– command line program `markdown`
 
