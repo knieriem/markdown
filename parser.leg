@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	parserIfaceVersion_5 = iota
+	parserIfaceVersion_6 = iota
 )
 
 // Semantic value of a parsing action.
@@ -754,7 +754,7 @@ EnDash = '-' &Digit
 EmDash = ("---" | "--")
          { $$ = p.mkElem(EMDASH) }
 
-SingleQuoteStart = '\'' ![)!\],.;:-? \t\n]
+SingleQuoteStart = '\''
 
 SingleQuoteEnd = '\'' !Alphanumeric
 
