@@ -73,7 +73,7 @@ L:
 		tree = p.processRawBlocks(tree)
 		f.FormatBlock(tree)
 		switch s {
-		case "", "\n", "\n\n":
+		case "", "\n", "\r\n", "\n\n", "\r\n\n", "\n\n\n", "\r\n\n\n":
 			break L
 		}
 	}
@@ -169,6 +169,6 @@ func (p *Parser) preformat(r io.Reader) (s string) {
 		b.Write(buf[i0:n])
 	}
 
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 	return b.String()
 }
