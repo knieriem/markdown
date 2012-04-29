@@ -24,6 +24,16 @@ import (
 	"strings"
 )
 
+const (
+	// If you get a build error message saying that
+	// parserIfaceVersion_N is undefined, parser.leg.go
+	// either is not present or it is out of date. You should
+	// rebuild it using
+	//	make nuke
+	//	make parser
+	needParserIfaceVersion = parserIfaceVersion_1
+)
+
 // Markdown Options:
 type Options struct {
 	Smart        bool

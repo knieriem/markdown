@@ -27,6 +27,10 @@ import (
 	"log"
 )
 
+const (
+	parserIfaceVersion_1 = iota
+)
+
 // Semantic value of a parsing action.
 type element struct {
 	key	int
