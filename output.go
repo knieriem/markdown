@@ -86,6 +86,7 @@ func (w *htmlOut) str(s string) *htmlOut {
 	var ws string
 	var i0 = 0
 
+	o := w.obfuscate
 	for i, r := range s {
 		switch r {
 		case '&':
@@ -97,7 +98,7 @@ func (w *htmlOut) str(s string) *htmlOut {
 		case '"':
 			ws = "&quot;"
 		default:
-			if w.obfuscate {
+			if o {
 				if rand.Intn(2) == 0 {
 					ws = fmt.Sprintf("&#%d;", r)
 				} else {

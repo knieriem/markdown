@@ -160,8 +160,8 @@ func (p *Parser) preformat(r io.Reader) (s string) {
 			break
 		}
 		i0 := 0
-		for i := range buf[:n] {
-			switch buf[i] {
+		for i, c := range buf[:n] {
+			switch c {
 			case '\t':
 				b.Write(buf[i0:i])
 				for ; charstotab > 0; charstotab-- {
