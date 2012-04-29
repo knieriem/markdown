@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	parserIfaceVersion_3 = iota
+	parserIfaceVersion_4 = iota
 )
 
 // Semantic value of a parsing action.
@@ -630,7 +630,7 @@ AutoLinkEmail = '<' < [-A-Za-z0-9+_]+ '@' ( !Newline !'>' . )+ > '>'
                     $$ = p.mkLink(p.mkString(yytext), "mailto:"+yytext, "")
                 }
 
-Reference = NonindentSpace !"[]" l:Label ':' Spnl s:RefSrc Spnl t:RefTitle BlankLine*
+Reference = NonindentSpace !"[]" l:Label ':' Spnl s:RefSrc t:RefTitle BlankLine+
             { $$ = p.mkLink(l.children, s.contents.str, t.contents.str)
               s = nil
               t = nil
@@ -652,11 +652,11 @@ RefTitle =  ( RefTitleSingle | RefTitleDouble | RefTitleParens | EmptyTitle )
 
 EmptyTitle = < "" >
 
-RefTitleSingle = '\'' < ( !( '\'' Sp Newline | Newline ) . )* > '\''
+RefTitleSingle = Spnl '\'' < ( !( '\'' Sp Newline | Newline ) . )* > '\''
 
-RefTitleDouble = '"' < ( !('"' Sp Newline | Newline) . )* > '"'
+RefTitleDouble = Spnl '"' < ( !('"' Sp Newline | Newline) . )* > '"'
 
-RefTitleParens = '(' < ( !(')' Sp Newline | Newline) . )* > ')'
+RefTitleParens = Spnl '(' < ( !(')' Sp Newline | Newline) . )* > ')'
 
 References = a:StartList
              ( b:Reference { a = cons(b, a) } | SkipBlock )*
