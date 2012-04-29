@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	parserIfaceVersion_4 = iota
+	parserIfaceVersion_5 = iota
 )
 
 // Semantic value of a parsing action.
@@ -491,8 +491,15 @@ Space = Spacechar+
         { $$ = p.mkString(" ")
           $$.key = SPACE }
 
-Str = < NormalChar (NormalChar | '_'+ &Alphanumeric)* >
-        { $$ = p.mkString(yytext) }
+Str = a:StartList < NormalChar+ > { a = cons(p.mkString(yytext), a) }
+      ( StrChunk { a = cons($$, a) } )*
+      { if a.next == nil { $$ = a; } else { $$ = p.mkList(LIST, a) } }
+
+StrChunk = < (NormalChar | '_'+ &Alphanumeric)+ > { $$ = p.mkString(yytext) } |
+           AposChunk
+
+AposChunk = &{ p.extension.Smart } '\'' &Alphanumeric
+      { $$ = p.mkElem(APOSTROPHE) }
 
 EscapedChar =   '\\' !Newline < [-\\`|*_{}[\]()#+.!><] >
                 { $$ = p.mkString(yytext) }
@@ -747,7 +754,7 @@ EnDash = '-' &Digit
 EmDash = ("---" | "--")
          { $$ = p.mkElem(EMDASH) }
 
-SingleQuoteStart = '\'' ![)!\],.;:-? \t\n] !( ( "s" | "t" | "m" | "ve" | "ll" | "re" ) !Alphanumeric )
+SingleQuoteStart = '\'' ![)!\],.;:-? \t\n]
 
 SingleQuoteEnd = '\'' !Alphanumeric
 
