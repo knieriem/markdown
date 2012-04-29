@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	parserIfaceVersion_2 = iota
+	parserIfaceVersion_3 = iota
 )
 
 // Semantic value of a parsing action.
@@ -160,7 +160,7 @@ SetextHeading2 =  &(RawLine SetextBottom2)
                   a:StartList ( !Endline Inline { a = cons($$, a) } )+ Sp? Newline
                   SetextBottom2 { $$ = p.mkList(H2, a) }
 
-Heading = AtxHeading | SetextHeading
+Heading = SetextHeading | AtxHeading
 
 BlockQuote = a:BlockQuoteRaw
              {  $$ = p.mkElem(BLOCKQUOTE)
