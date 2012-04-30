@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	parserIfaceVersion_9 = iota
+	parserIfaceVersion_10 = iota
 )
 
 // Semantic value of a parsing action.
@@ -684,7 +684,7 @@ Code = ( Ticks1 Sp < ( ( !'`' Nonspacechar )+ | !Ticks1 '`'+ | !( Sp Ticks1 ) ( 
        )
        { $$ = p.mkString(yytext); $$.key = CODE }
 
-RawHtml =   < (HtmlComment | HtmlTag) >
+RawHtml =   < (HtmlComment | HtmlBlockScript | HtmlTag) >
             {   if p.extension.FilterHTML {
                     $$ = p.mkList(LIST, nil)
                 } else {
