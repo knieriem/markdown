@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	parserIfaceVersion_8 = iota
+	parserIfaceVersion_9 = iota
 )
 
 // Semantic value of a parsing action.
@@ -397,7 +397,7 @@ HtmlBlockTr = HtmlBlockOpenTr (HtmlBlockTr | !HtmlBlockCloseTr .)* HtmlBlockClos
 
 HtmlBlockOpenScript = '<' Spnl ("script" | "SCRIPT") Spnl HtmlAttribute* '>'
 HtmlBlockCloseScript = '<' Spnl '/' ("script" | "SCRIPT") Spnl '>'
-HtmlBlockScript = HtmlBlockOpenScript (HtmlBlockScript | !HtmlBlockCloseScript .)* HtmlBlockCloseScript
+HtmlBlockScript = HtmlBlockOpenScript (!HtmlBlockCloseScript .)* HtmlBlockCloseScript
 
 
 HtmlBlockInTags = HtmlBlockAddress
