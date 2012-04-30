@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	parserIfaceVersion_15 = iota
+	parserIfaceVersion_16 = iota
 )
 
 // Semantic value of a parsing action.
@@ -541,7 +541,7 @@ EmphStar =  OneStarOpen
             { $$ = p.mkList(EMPH, a) }
 
 OneUlOpen  =  !UlLine '_' !Spacechar !Newline
-OneUlClose =  !Spacechar !Newline a:Inline !StrongUl '_' !Alphanumeric { $$ = a }
+OneUlClose =  !Spacechar !Newline a:Inline '_' !Alphanumeric { $$ = a }
 
 EmphUl =    OneUlOpen
             a:StartList
