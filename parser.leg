@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	parserIfaceVersion_13 = iota
+	parserIfaceVersion_14 = iota
 )
 
 // Semantic value of a parsing action.
@@ -732,7 +732,7 @@ RawLine = ( < (!'\r' !'\n' .)* Newline > | < .+ > Eof )
 SkipBlock = HtmlBlock
           | ( !'#' !SetextBottom1 !SetextBottom2 !BlankLine RawLine )+ BlankLine*
           | BlankLine+
-          | ( &('#' | SetextBottom1 | SetextBottom2) RawLine )
+          | RawLine
 
 # Syntax extensions
 
