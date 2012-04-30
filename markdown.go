@@ -31,7 +31,7 @@ const (
 	// rebuild it using
 	//	make nuke
 	//	make parser
-	needParserIfaceVersion = parserIfaceVersion_10
+	needParserIfaceVersion = parserIfaceVersion_11
 )
 
 // Markdown Options:
