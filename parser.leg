@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	parserIfaceVersion_11 = iota
+	parserIfaceVersion_12 = iota
 )
 
 // Semantic value of a parsing action.
@@ -632,7 +632,7 @@ AutoLink = AutoLinkUrl | AutoLinkEmail
 AutoLinkUrl =   '<' < [A-Za-z]+ "://" ( !Newline !'>' . )+ > '>'
                 {   $$ = p.mkLink(p.mkString(yytext), yytext, "") }
 
-AutoLinkEmail = '<' < [-A-Za-z0-9+_]+ '@' ( !Newline !'>' . )+ > '>'
+AutoLinkEmail = '<' ( "mailto:" )? < [-A-Za-z0-9+_./!%~$]+ '@' ( !Newline !'>' . )+ > '>'
                 {
                     $$ = p.mkLink(p.mkString(yytext), "mailto:"+yytext, "")
                 }
