@@ -25,7 +25,10 @@ import (
 	"io"
 	"strings"
 	"log"
-	"sync"
+)
+
+const (
+	parserIfaceVersion_16 = iota
 )
 
 // Semantic value of a parsing action.
@@ -92,7 +95,8 @@ const (
 )
 
 type state struct {
-	extension		Options
+	extension		Extensions
+	heap	elemHeap
 	tree				*element	/* Results of parse. */
 	references			*element	/* List of link references found. */
 	notes				*element	/* List of footnotes found. */
@@ -242,6 +246,8 @@ const (
 	ruleInline
 	ruleSpace
 	ruleStr
+	ruleStrChunk
+	ruleAposChunk
 	ruleEscapedChar
 	ruleEntity
 	ruleEndline
@@ -356,7 +362,7 @@ type yyParser struct {
 	state
 	Buffer string
 	Min, Max int
-	rules [250]func() bool
+	rules [252]func() bool
 	ResetBuffer	func(string) string
 }
 
@@ -457,24 +463,24 @@ func (p *yyParser) Init() {
 		},
 		/* 5 AtxStart */
 		func(yytext string, _ int) {
-			 yy = mk_element(H1 + (len(yytext) - 1)) 
+			 yy = p.mkElem(H1 + (len(yytext) - 1)) 
 		},
 		/* 6 AtxHeading */
 		func(yytext string, _ int) {
-			s := yyval[yyp-1]
-			a := yyval[yyp-2]
+			a := yyval[yyp-1]
+			s := yyval[yyp-2]
 			 a = cons(yy, a) 
-			yyval[yyp-1] = s
-			yyval[yyp-2] = a
+			yyval[yyp-1] = a
+			yyval[yyp-2] = s
 		},
 		/* 7 AtxHeading */
 		func(yytext string, _ int) {
-			a := yyval[yyp-2]
-			s := yyval[yyp-1]
-			 yy = mk_list(s.key, a)
+			a := yyval[yyp-1]
+			s := yyval[yyp-2]
+			 yy = p.mkList(s.key, a)
               s = nil 
-			yyval[yyp-1] = s
-			yyval[yyp-2] = a
+			yyval[yyp-1] = a
+			yyval[yyp-2] = s
 		},
 		/* 8 SetextHeading1 */
 		func(yytext string, _ int) {
@@ -485,7 +491,7 @@ func (p *yyParser) Init() {
 		/* 9 SetextHeading1 */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			 yy = mk_list(H1, a) 
+			 yy = p.mkList(H1, a) 
 			yyval[yyp-1] = a
 		},
 		/* 10 SetextHeading2 */
@@ -497,13 +503,13 @@ func (p *yyParser) Init() {
 		/* 11 SetextHeading2 */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			 yy = mk_list(H2, a) 
+			 yy = p.mkList(H2, a) 
 			yyval[yyp-1] = a
 		},
 		/* 12 BlockQuote */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			  yy = mk_element(BLOCKQUOTE)
+			  yy = p.mkElem(BLOCKQUOTE)
                 yy.children = a
              
 			yyval[yyp-1] = a
@@ -523,13 +529,13 @@ func (p *yyParser) Init() {
 		/* 15 BlockQuoteRaw */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			 a = cons(mk_str("\n"), a) 
+			 a = cons(p.mkString("\n"), a) 
 			yyval[yyp-1] = a
 		},
 		/* 16 BlockQuoteRaw */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			   yy = mk_str_from_list(a, true)
+			   yy = p.mkStringFromList(a, true)
                      yy.key = RAW
                  
 			yyval[yyp-1] = a
@@ -537,7 +543,7 @@ func (p *yyParser) Init() {
 		/* 17 VerbatimChunk */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			 a = cons(mk_str("\n"), a) 
+			 a = cons(p.mkString("\n"), a) 
 			yyval[yyp-1] = a
 		},
 		/* 18 VerbatimChunk */
@@ -549,7 +555,7 @@ func (p *yyParser) Init() {
 		/* 19 VerbatimChunk */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			 yy = mk_str_from_list(a, false) 
+			 yy = p.mkStringFromList(a, false) 
 			yyval[yyp-1] = a
 		},
 		/* 20 Verbatim */
@@ -561,13 +567,13 @@ func (p *yyParser) Init() {
 		/* 21 Verbatim */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			 yy = mk_str_from_list(a, false)
+			 yy = p.mkStringFromList(a, false)
                  yy.key = VERBATIM 
 			yyval[yyp-1] = a
 		},
 		/* 22 HorizontalRule */
 		func(yytext string, _ int) {
-			 yy = mk_element(HRULE) 
+			 yy = p.mkElem(HRULE) 
 		},
 		/* 23 BulletList */
 		func(yytext string, _ int) {
@@ -582,28 +588,28 @@ func (p *yyParser) Init() {
 		/* 25 ListTight */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			 yy = mk_list(LIST, a) 
+			 yy = p.mkList(LIST, a) 
 			yyval[yyp-1] = a
 		},
 		/* 26 ListLoose */
 		func(yytext string, _ int) {
-			a := yyval[yyp-1]
-			b := yyval[yyp-2]
+			b := yyval[yyp-1]
+			a := yyval[yyp-2]
 			
                   li := b.children
                   li.contents.str += "\n\n"
                   a = cons(b, a)
               
-			yyval[yyp-1] = a
-			yyval[yyp-2] = b
+			yyval[yyp-1] = b
+			yyval[yyp-2] = a
 		},
 		/* 27 ListLoose */
 		func(yytext string, _ int) {
-			a := yyval[yyp-1]
-			b := yyval[yyp-2]
-			 yy = mk_list(LIST, a) 
-			yyval[yyp-1] = a
-			yyval[yyp-2] = b
+			b := yyval[yyp-1]
+			a := yyval[yyp-2]
+			 yy = p.mkList(LIST, a) 
+			yyval[yyp-1] = b
+			yyval[yyp-2] = a
 		},
 		/* 28 ListItem */
 		func(yytext string, _ int) {
@@ -621,9 +627,9 @@ func (p *yyParser) Init() {
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			
-               raw := mk_str_from_list(a, false)
+               raw := p.mkStringFromList(a, false)
                raw.key = RAW
-               yy = mk_element(LISTITEM)
+               yy = p.mkElem(LISTITEM)
                yy.children = raw
             
 			yyval[yyp-1] = a
@@ -644,9 +650,9 @@ func (p *yyParser) Init() {
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			
-               raw := mk_str_from_list(a, false)
+               raw := p.mkStringFromList(a, false)
                raw.key = RAW
-               yy = mk_element(LISTITEM)
+               yy = p.mkElem(LISTITEM)
                yy.children = raw
             
 			yyval[yyp-1] = a
@@ -666,16 +672,16 @@ func (p *yyParser) Init() {
 		/* 36 ListBlock */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			 yy = mk_str_from_list(a, false) 
+			 yy = p.mkStringFromList(a, false) 
 			yyval[yyp-1] = a
 		},
 		/* 37 ListContinuationBlock */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			   if len(yytext) == 0 {
-                                   a = cons(mk_str("\001"), a) // block separator
+                                   a = cons(p.mkString("\001"), a) // block separator
                               } else {
-                                   a = cons(mk_str(yytext), a)
+                                   a = cons(p.mkString(yytext), a)
                               }
                           
 			yyval[yyp-1] = a
@@ -689,7 +695,7 @@ func (p *yyParser) Init() {
 		/* 39 ListContinuationBlock */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			  yy = mk_str_from_list(a, false) 
+			  yy = p.mkStringFromList(a, false) 
 			yyval[yyp-1] = a
 		},
 		/* 40 OrderedList */
@@ -699,9 +705,9 @@ func (p *yyParser) Init() {
 		/* 41 HtmlBlock */
 		func(yytext string, _ int) {
 			   if p.extension.FilterHTML {
-                    yy = mk_list(LIST, nil)
+                    yy = p.mkList(LIST, nil)
                 } else {
-                    yy = mk_str(yytext)
+                    yy = p.mkString(yytext)
                     yy.key = HTMLBLOCK
                 }
             
@@ -709,282 +715,304 @@ func (p *yyParser) Init() {
 		/* 42 StyleBlock */
 		func(yytext string, _ int) {
 			   if p.extension.FilterStyles {
-                        yy = mk_list(LIST, nil)
+                        yy = p.mkList(LIST, nil)
                     } else {
-                        yy = mk_str(yytext)
+                        yy = p.mkString(yytext)
                         yy.key = HTMLBLOCK
                     }
                 
 		},
 		/* 43 Inlines */
 		func(yytext string, _ int) {
-			a := yyval[yyp-1]
-			c := yyval[yyp-2]
+			c := yyval[yyp-1]
+			a := yyval[yyp-2]
 			 a = cons(yy, a) 
-			yyval[yyp-1] = a
-			yyval[yyp-2] = c
+			yyval[yyp-2] = a
+			yyval[yyp-1] = c
 		},
 		/* 44 Inlines */
 		func(yytext string, _ int) {
-			c := yyval[yyp-2]
-			a := yyval[yyp-1]
+			c := yyval[yyp-1]
+			a := yyval[yyp-2]
 			 a = cons(c, a) 
-			yyval[yyp-2] = c
-			yyval[yyp-1] = a
+			yyval[yyp-2] = a
+			yyval[yyp-1] = c
 		},
 		/* 45 Inlines */
 		func(yytext string, _ int) {
-			c := yyval[yyp-2]
-			a := yyval[yyp-1]
-			 yy = mk_list(LIST, a) 
-			yyval[yyp-1] = a
-			yyval[yyp-2] = c
+			a := yyval[yyp-2]
+			c := yyval[yyp-1]
+			 yy = p.mkList(LIST, a) 
+			yyval[yyp-1] = c
+			yyval[yyp-2] = a
 		},
 		/* 46 Space */
 		func(yytext string, _ int) {
-			 yy = mk_str(" ")
+			 yy = p.mkString(" ")
           yy.key = SPACE 
 		},
 		/* 47 Str */
 		func(yytext string, _ int) {
-			 yy = mk_str(yytext) 
+			a := yyval[yyp-1]
+			 a = cons(p.mkString(yytext), a) 
+			yyval[yyp-1] = a
 		},
-		/* 48 EscapedChar */
+		/* 48 Str */
 		func(yytext string, _ int) {
-			 yy = mk_str(yytext) 
+			a := yyval[yyp-1]
+			 a = cons(yy, a) 
+			yyval[yyp-1] = a
 		},
-		/* 49 Entity */
+		/* 49 Str */
 		func(yytext string, _ int) {
-			 yy = mk_str(yytext); yy.key = HTML 
+			a := yyval[yyp-1]
+			 if a.next == nil { yy = a; } else { yy = p.mkList(LIST, a) } 
+			yyval[yyp-1] = a
 		},
-		/* 50 NormalEndline */
+		/* 50 StrChunk */
 		func(yytext string, _ int) {
-			 yy = mk_str("\n")
+			 yy = p.mkString(yytext) 
+		},
+		/* 51 AposChunk */
+		func(yytext string, _ int) {
+			 yy = p.mkElem(APOSTROPHE) 
+		},
+		/* 52 EscapedChar */
+		func(yytext string, _ int) {
+			 yy = p.mkString(yytext) 
+		},
+		/* 53 Entity */
+		func(yytext string, _ int) {
+			 yy = p.mkString(yytext); yy.key = HTML 
+		},
+		/* 54 NormalEndline */
+		func(yytext string, _ int) {
+			 yy = p.mkString("\n")
                     yy.key = SPACE 
 		},
-		/* 51 TerminalEndline */
+		/* 55 TerminalEndline */
 		func(yytext string, _ int) {
 			 yy = nil 
 		},
-		/* 52 LineBreak */
+		/* 56 LineBreak */
 		func(yytext string, _ int) {
-			 yy = mk_element(LINEBREAK) 
+			 yy = p.mkElem(LINEBREAK) 
 		},
-		/* 53 Symbol */
+		/* 57 Symbol */
 		func(yytext string, _ int) {
-			 yy = mk_str(yytext) 
+			 yy = p.mkString(yytext) 
 		},
-		/* 54 UlOrStarLine */
+		/* 58 UlOrStarLine */
 		func(yytext string, _ int) {
-			 yy = mk_str(yytext) 
+			 yy = p.mkString(yytext) 
 		},
-		/* 55 OneStarClose */
-		func(yytext string, _ int) {
-			a := yyval[yyp-1]
-			 yy = a 
-			yyval[yyp-1] = a
-		},
-		/* 56 EmphStar */
-		func(yytext string, _ int) {
-			a := yyval[yyp-1]
-			 a = cons(yy, a) 
-			yyval[yyp-1] = a
-		},
-		/* 57 EmphStar */
-		func(yytext string, _ int) {
-			a := yyval[yyp-1]
-			 a = cons(yy, a) 
-			yyval[yyp-1] = a
-		},
-		/* 58 EmphStar */
-		func(yytext string, _ int) {
-			a := yyval[yyp-1]
-			 yy = mk_list(EMPH, a) 
-			yyval[yyp-1] = a
-		},
-		/* 59 OneUlClose */
+		/* 59 OneStarClose */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			 yy = a 
 			yyval[yyp-1] = a
 		},
-		/* 60 EmphUl */
+		/* 60 EmphStar */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
-		/* 61 EmphUl */
+		/* 61 EmphStar */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
-		/* 62 EmphUl */
+		/* 62 EmphStar */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			 yy = mk_list(EMPH, a) 
+			 yy = p.mkList(EMPH, a) 
 			yyval[yyp-1] = a
 		},
-		/* 63 TwoStarClose */
+		/* 63 OneUlClose */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			 yy = a 
 			yyval[yyp-1] = a
 		},
-		/* 64 StrongStar */
+		/* 64 EmphUl */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
-		/* 65 StrongStar */
+		/* 65 EmphUl */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
-		/* 66 StrongStar */
+		/* 66 EmphUl */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			 yy = mk_list(STRONG, a) 
+			 yy = p.mkList(EMPH, a) 
 			yyval[yyp-1] = a
 		},
-		/* 67 TwoUlClose */
+		/* 67 TwoStarClose */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			 yy = a 
 			yyval[yyp-1] = a
 		},
-		/* 68 StrongUl */
+		/* 68 StrongStar */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
-		/* 69 StrongUl */
+		/* 69 StrongStar */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
-		/* 70 StrongUl */
+		/* 70 StrongStar */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			 yy = mk_list(STRONG, a) 
+			 yy = p.mkList(STRONG, a) 
 			yyval[yyp-1] = a
 		},
-		/* 71 Image */
+		/* 71 TwoUlClose */
+		func(yytext string, _ int) {
+			a := yyval[yyp-1]
+			 yy = a 
+			yyval[yyp-1] = a
+		},
+		/* 72 StrongUl */
+		func(yytext string, _ int) {
+			a := yyval[yyp-1]
+			 a = cons(yy, a) 
+			yyval[yyp-1] = a
+		},
+		/* 73 StrongUl */
+		func(yytext string, _ int) {
+			a := yyval[yyp-1]
+			 a = cons(yy, a) 
+			yyval[yyp-1] = a
+		},
+		/* 74 StrongUl */
+		func(yytext string, _ int) {
+			a := yyval[yyp-1]
+			 yy = p.mkList(STRONG, a) 
+			yyval[yyp-1] = a
+		},
+		/* 75 Image */
 		func(yytext string, _ int) {
 				if yy.key == LINK {
 			yy.key = IMAGE
 		} else {
 			result := yy
-			yy.children = cons(mk_str("!"), result.children)
+			yy.children = cons(p.mkString("!"), result.children)
 		}
 	
 		},
-		/* 72 ReferenceLinkDouble */
+		/* 76 ReferenceLinkDouble */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
 			
                            if match, found := p.findReference(b.children); found {
-                               yy = mk_link(a.children, match.url, match.title);
+                               yy = p.mkLink(a.children, match.url, match.title);
                                a = nil
                                b = nil
                            } else {
-                               result := mk_element(LIST)
-                               result.children = cons(mk_str("["), cons(a, cons(mk_str("]"), cons(mk_str(yytext),
-                                                   cons(mk_str("["), cons(b, mk_str("]")))))))
+                               result := p.mkElem(LIST)
+                               result.children = cons(p.mkString("["), cons(a, cons(p.mkString("]"), cons(p.mkString(yytext),
+                                                   cons(p.mkString("["), cons(b, p.mkString("]")))))))
                                yy = result
                            }
                        
-			yyval[yyp-1] = a
 			yyval[yyp-2] = b
+			yyval[yyp-1] = a
 		},
-		/* 73 ReferenceLinkSingle */
+		/* 77 ReferenceLinkSingle */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			
                            if match, found := p.findReference(a.children); found {
-                               yy = mk_link(a.children, match.url, match.title)
+                               yy = p.mkLink(a.children, match.url, match.title)
                                a = nil
                            } else {
-                               result := mk_element(LIST)
-                               result.children = cons(mk_str("["), cons(a, cons(mk_str("]"), mk_str(yytext))));
+                               result := p.mkElem(LIST)
+                               result.children = cons(p.mkString("["), cons(a, cons(p.mkString("]"), p.mkString(yytext))));
                                yy = result
                            }
                        
 			yyval[yyp-1] = a
 		},
-		/* 74 ExplicitLink */
+		/* 78 ExplicitLink */
+		func(yytext string, _ int) {
+			l := yyval[yyp-1]
+			s := yyval[yyp-2]
+			t := yyval[yyp-3]
+			 yy = p.mkLink(l.children, s.contents.str, t.contents.str)
+                  s = nil
+                  t = nil
+                  l = nil 
+			yyval[yyp-1] = l
+			yyval[yyp-2] = s
+			yyval[yyp-3] = t
+		},
+		/* 79 Source */
+		func(yytext string, _ int) {
+			 yy = p.mkString(yytext) 
+		},
+		/* 80 Title */
+		func(yytext string, _ int) {
+			 yy = p.mkString(yytext) 
+		},
+		/* 81 AutoLinkUrl */
+		func(yytext string, _ int) {
+			   yy = p.mkLink(p.mkString(yytext), yytext, "") 
+		},
+		/* 82 AutoLinkEmail */
+		func(yytext string, _ int) {
+			
+                    yy = p.mkLink(p.mkString(yytext), "mailto:"+yytext, "")
+                
+		},
+		/* 83 Reference */
 		func(yytext string, _ int) {
 			t := yyval[yyp-1]
 			l := yyval[yyp-2]
 			s := yyval[yyp-3]
-			 yy = mk_link(l.children, s.contents.str, t.contents.str)
-                  s = nil
-                  t = nil
-                  l = nil 
-			yyval[yyp-2] = l
-			yyval[yyp-3] = s
-			yyval[yyp-1] = t
-		},
-		/* 75 Source */
-		func(yytext string, _ int) {
-			 yy = mk_str(yytext) 
-		},
-		/* 76 Title */
-		func(yytext string, _ int) {
-			 yy = mk_str(yytext) 
-		},
-		/* 77 AutoLinkUrl */
-		func(yytext string, _ int) {
-			   yy = mk_link(mk_str(yytext), yytext, "") 
-		},
-		/* 78 AutoLinkEmail */
-		func(yytext string, _ int) {
-			
-                    yy = mk_link(mk_str(yytext), "mailto:"+yytext, "")
-                
-		},
-		/* 79 Reference */
-		func(yytext string, _ int) {
-			s := yyval[yyp-1]
-			l := yyval[yyp-2]
-			t := yyval[yyp-3]
-			 yy = mk_link(l.children, s.contents.str, t.contents.str)
+			 yy = p.mkLink(l.children, s.contents.str, t.contents.str)
               s = nil
               t = nil
               l = nil
               yy.key = REFERENCE 
-			yyval[yyp-3] = t
-			yyval[yyp-1] = s
 			yyval[yyp-2] = l
+			yyval[yyp-3] = s
+			yyval[yyp-1] = t
 		},
-		/* 80 Label */
+		/* 84 Label */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
-		/* 81 Label */
+		/* 85 Label */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			 yy = mk_list(LIST, a) 
+			 yy = p.mkList(LIST, a) 
 			yyval[yyp-1] = a
 		},
-		/* 82 RefSrc */
+		/* 86 RefSrc */
 		func(yytext string, _ int) {
-			 yy = mk_str(yytext)
+			 yy = p.mkString(yytext)
            yy.key = HTML 
 		},
-		/* 83 RefTitle */
+		/* 87 RefTitle */
 		func(yytext string, _ int) {
-			 yy = mk_str(yytext) 
+			 yy = p.mkString(yytext) 
 		},
-		/* 84 References */
+		/* 88 References */
 		func(yytext string, _ int) {
 			b := yyval[yyp-1]
 			a := yyval[yyp-2]
@@ -992,196 +1020,196 @@ func (p *yyParser) Init() {
 			yyval[yyp-1] = b
 			yyval[yyp-2] = a
 		},
-		/* 85 References */
+		/* 89 References */
 		func(yytext string, _ int) {
 			b := yyval[yyp-1]
 			a := yyval[yyp-2]
 			 p.references = reverse(a) 
-			yyval[yyp-1] = b
 			yyval[yyp-2] = a
+			yyval[yyp-1] = b
 		},
-		/* 86 Code */
+		/* 90 Code */
 		func(yytext string, _ int) {
-			 yy = mk_str(yytext); yy.key = CODE 
+			 yy = p.mkString(yytext); yy.key = CODE 
 		},
-		/* 87 RawHtml */
+		/* 91 RawHtml */
 		func(yytext string, _ int) {
 			   if p.extension.FilterHTML {
-                    yy = mk_list(LIST, nil)
+                    yy = p.mkList(LIST, nil)
                 } else {
-                    yy = mk_str(yytext)
+                    yy = p.mkString(yytext)
                     yy.key = HTML
                 }
             
 		},
-		/* 88 StartList */
+		/* 92 StartList */
 		func(yytext string, _ int) {
 			 yy = nil 
 		},
-		/* 89 Line */
+		/* 93 Line */
 		func(yytext string, _ int) {
-			 yy = mk_str(yytext) 
+			 yy = p.mkString(yytext) 
 		},
-		/* 90 Apostrophe */
+		/* 94 Apostrophe */
 		func(yytext string, _ int) {
-			 yy = mk_element(APOSTROPHE) 
+			 yy = p.mkElem(APOSTROPHE) 
 		},
-		/* 91 Ellipsis */
+		/* 95 Ellipsis */
 		func(yytext string, _ int) {
-			 yy = mk_element(ELLIPSIS) 
+			 yy = p.mkElem(ELLIPSIS) 
 		},
-		/* 92 EnDash */
+		/* 96 EnDash */
 		func(yytext string, _ int) {
-			 yy = mk_element(ENDASH) 
+			 yy = p.mkElem(ENDASH) 
 		},
-		/* 93 EmDash */
+		/* 97 EmDash */
 		func(yytext string, _ int) {
-			 yy = mk_element(EMDASH) 
+			 yy = p.mkElem(EMDASH) 
 		},
-		/* 94 SingleQuoted */
+		/* 98 SingleQuoted */
 		func(yytext string, _ int) {
-			a := yyval[yyp-1]
-			b := yyval[yyp-2]
+			b := yyval[yyp-1]
+			a := yyval[yyp-2]
 			 a = cons(b, a) 
-			yyval[yyp-1] = a
-			yyval[yyp-2] = b
+			yyval[yyp-1] = b
+			yyval[yyp-2] = a
 		},
-		/* 95 SingleQuoted */
+		/* 99 SingleQuoted */
 		func(yytext string, _ int) {
-			b := yyval[yyp-2]
-			a := yyval[yyp-1]
-			 yy = mk_list(SINGLEQUOTED, a) 
-			yyval[yyp-2] = b
-			yyval[yyp-1] = a
+			a := yyval[yyp-2]
+			b := yyval[yyp-1]
+			 yy = p.mkList(SINGLEQUOTED, a) 
+			yyval[yyp-2] = a
+			yyval[yyp-1] = b
 		},
-		/* 96 DoubleQuoted */
+		/* 100 DoubleQuoted */
 		func(yytext string, _ int) {
-			a := yyval[yyp-1]
-			b := yyval[yyp-2]
+			b := yyval[yyp-1]
+			a := yyval[yyp-2]
 			 a = cons(b, a) 
-			yyval[yyp-1] = a
-			yyval[yyp-2] = b
+			yyval[yyp-2] = a
+			yyval[yyp-1] = b
 		},
-		/* 97 DoubleQuoted */
+		/* 101 DoubleQuoted */
 		func(yytext string, _ int) {
-			a := yyval[yyp-1]
-			b := yyval[yyp-2]
-			 yy = mk_list(DOUBLEQUOTED, a) 
-			yyval[yyp-1] = a
-			yyval[yyp-2] = b
+			a := yyval[yyp-2]
+			b := yyval[yyp-1]
+			 yy = p.mkList(DOUBLEQUOTED, a) 
+			yyval[yyp-2] = a
+			yyval[yyp-1] = b
 		},
-		/* 98 NoteReference */
+		/* 102 NoteReference */
 		func(yytext string, _ int) {
 			ref := yyval[yyp-1]
 			
                     if match, ok := p.find_note(ref.contents.str); ok {
-                        yy = mk_element(NOTE)
+                        yy = p.mkElem(NOTE)
                         yy.children = match.children
                         yy.contents.str = ""
                     } else {
-                        yy = mk_str("[^"+ref.contents.str+"]")
+                        yy = p.mkString("[^"+ref.contents.str+"]")
                     }
                 
 			yyval[yyp-1] = ref
 		},
-		/* 99 RawNoteReference */
+		/* 103 RawNoteReference */
 		func(yytext string, _ int) {
-			 yy = mk_str(yytext) 
+			 yy = p.mkString(yytext) 
 		},
-		/* 100 Note */
+		/* 104 Note */
 		func(yytext string, _ int) {
-			ref := yyval[yyp-1]
-			a := yyval[yyp-2]
+			a := yyval[yyp-1]
+			ref := yyval[yyp-2]
 			 a = cons(yy, a) 
-			yyval[yyp-1] = ref
-			yyval[yyp-2] = a
+			yyval[yyp-1] = a
+			yyval[yyp-2] = ref
 		},
-		/* 101 Note */
+		/* 105 Note */
 		func(yytext string, _ int) {
-			ref := yyval[yyp-1]
-			a := yyval[yyp-2]
+			a := yyval[yyp-1]
+			ref := yyval[yyp-2]
 			 a = cons(yy, a) 
-			yyval[yyp-2] = a
-			yyval[yyp-1] = ref
+			yyval[yyp-2] = ref
+			yyval[yyp-1] = a
 		},
-		/* 102 Note */
+		/* 106 Note */
 		func(yytext string, _ int) {
-			a := yyval[yyp-2]
-			ref := yyval[yyp-1]
-			   yy = mk_list(NOTE, a)
+			ref := yyval[yyp-2]
+			a := yyval[yyp-1]
+			   yy = p.mkList(NOTE, a)
                     yy.contents.str = ref.contents.str
                 
-			yyval[yyp-1] = ref
-			yyval[yyp-2] = a
+			yyval[yyp-1] = a
+			yyval[yyp-2] = ref
 		},
-		/* 103 InlineNote */
+		/* 107 InlineNote */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
-		/* 104 InlineNote */
+		/* 108 InlineNote */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			 yy = mk_list(NOTE, a)
+			 yy = p.mkList(NOTE, a)
                   yy.contents.str = "" 
 			yyval[yyp-1] = a
 		},
-		/* 105 Notes */
+		/* 109 Notes */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
 			 a = cons(b, a) 
-			yyval[yyp-1] = a
 			yyval[yyp-2] = b
+			yyval[yyp-1] = a
 		},
-		/* 106 Notes */
+		/* 110 Notes */
 		func(yytext string, _ int) {
-			b := yyval[yyp-2]
 			a := yyval[yyp-1]
+			b := yyval[yyp-2]
 			 p.notes = reverse(a) 
-			yyval[yyp-2] = b
 			yyval[yyp-1] = a
+			yyval[yyp-2] = b
 		},
-		/* 107 RawNoteBlock */
+		/* 111 RawNoteBlock */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
-		/* 108 RawNoteBlock */
+		/* 112 RawNoteBlock */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			 a = cons(mk_str(yytext), a) 
+			 a = cons(p.mkString(yytext), a) 
 			yyval[yyp-1] = a
 		},
-		/* 109 RawNoteBlock */
+		/* 113 RawNoteBlock */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			   yy = mk_str_from_list(a, true)
+			   yy = p.mkStringFromList(a, true)
                     yy.key = RAW
                 
 			yyval[yyp-1] = a
 		},
-		/* 110 DefinitionList */
+		/* 114 DefinitionList */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
-		/* 111 DefinitionList */
+		/* 115 DefinitionList */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			 yy = mk_list(DEFINITIONLIST, a) 
+			 yy = p.mkList(DEFINITIONLIST, a) 
 			yyval[yyp-1] = a
 		},
-		/* 112 Definition */
+		/* 116 Definition */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
-		/* 113 Definition */
+		/* 117 Definition */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			
@@ -1192,22 +1220,22 @@ func (p *yyParser) Init() {
 			
 			yyval[yyp-1] = a
 		},
-		/* 114 Definition */
+		/* 118 Definition */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			 yy = mk_list(LIST, a) 
+			 yy = p.mkList(LIST, a) 
 			yyval[yyp-1] = a
 		},
-		/* 115 DListTitle */
+		/* 119 DListTitle */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
-		/* 116 DListTitle */
+		/* 120 DListTitle */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-				yy = mk_list(LIST, a)
+				yy = p.mkList(LIST, a)
 				yy.key = DEFTITLE
 			
 			yyval[yyp-1] = a
@@ -1232,7 +1260,7 @@ func (p *yyParser) Init() {
 		},
 	}
 	const (
-		yyPush = 117 + iota
+		yyPush = 121 + iota
 		yyPop
 		yySet
 	)
@@ -1249,14 +1277,15 @@ func (p *yyParser) Init() {
 			copy(newThunks, thunks)
 			thunks = newThunks
 		}
-		thunks[thunkPosition].action = action
-		if arg != 0 {
-			thunks[thunkPosition].begin = arg // use begin to store an argument
-		} else {
-			thunks[thunkPosition].begin = begin
-		}
-		thunks[thunkPosition].end = end
+		t := &thunks[thunkPosition]
 		thunkPosition++
+		t.action = action
+		if arg != 0 {
+			t.begin = arg // use begin to store an argument
+		} else {
+			t.begin = begin
+		}
+		t.end = end
 	}
 	do := func(action uint8) {
 		doarg(action, 0)
@@ -1271,20 +1300,20 @@ func (p *yyParser) Init() {
 		position = 0
 		p.Min = 0
 		p.Max = 0
+		end = 0
 		return
 	}
 
 	commit := func(thunkPosition0 int) bool {
 		if thunkPosition0 == 0 {
-			for i := 0; i < thunkPosition; i++ {
-				b := thunks[i].begin
-				e := thunks[i].end
-				s := ""
-				if b >= 0 && e <= len(p.Buffer) && b <= e {
-					s = p.Buffer[b:e]
+			s := ""
+			for _, t := range thunks[:thunkPosition] {
+				b := t.begin
+				if b >= 0 && b <= t.end {
+					s = p.Buffer[b:t.end]
 				}
 				magic := b
-				actions[thunks[i].action](s, magic)
+				actions[t.action](s, magic)
 			}
 			p.Min = position
 			thunkPosition = 0
@@ -1329,8 +1358,7 @@ func (p *yyParser) Init() {
 	}
 
 	classes := [...][32]uint8{
-	9:	{0, 6, 0, 0, 3, 82, 0, 252, 0, 0, 0, 32, 0, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	3:	{0, 0, 0, 0, 0, 40, 255, 3, 254, 255, 255, 135, 254, 255, 255, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	3:	{0, 0, 0, 0, 50, 232, 255, 3, 254, 255, 255, 135, 254, 255, 255, 71, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	1:	{0, 0, 0, 0, 10, 111, 0, 80, 0, 0, 0, 184, 1, 0, 0, 56, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	0:	{0, 0, 0, 0, 0, 0, 255, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	5:	{0, 0, 0, 0, 0, 0, 255, 3, 254, 255, 255, 7, 254, 255, 255, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -1563,7 +1591,7 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
-		/* 6 AtxStart <- (&'#' < ('######' / '#####' / '####' / '###' / '##' / '#') > { yy = mk_element(H1 + (len(yytext) - 1)) }) */
+		/* 6 AtxStart <- (&'#' < ('######' / '#####' / '####' / '###' / '##' / '#') > { yy = p.mkElem(H1 + (len(yytext) - 1)) }) */
 		func() bool {
 			position0 := position
 			if !peekChar('#') {
@@ -1606,7 +1634,7 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
-		/* 7 AtxHeading <- (AtxStart Sp? StartList (AtxInline { a = cons(yy, a) })+ (Sp? '#'* Sp)? Newline { yy = mk_list(s.key, a)
+		/* 7 AtxHeading <- (AtxStart Sp? StartList (AtxInline { a = cons(yy, a) })+ (Sp? '#'* Sp)? Newline { yy = p.mkList(s.key, a)
               s = nil }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
@@ -1614,7 +1642,7 @@ func (p *yyParser) Init() {
 			if !p.rules[ruleAtxStart]() {
 				goto l38
 			}
-			doarg(yySet, -1)
+			doarg(yySet, -2)
 			if !p.rules[ruleSp]() {
 				goto l39
 			}
@@ -1622,7 +1650,7 @@ func (p *yyParser) Init() {
 			if !p.rules[ruleStartList]() {
 				goto l38
 			}
-			doarg(yySet, -2)
+			doarg(yySet, -1)
 			if !p.rules[ruleAtxInline]() {
 				goto l38
 			}
@@ -1723,7 +1751,7 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
-		/* 11 SetextHeading1 <- (&(RawLine SetextBottom1) StartList (!Endline Inline { a = cons(yy, a) })+ Newline SetextBottom1 { yy = mk_list(H1, a) }) */
+		/* 11 SetextHeading1 <- (&(RawLine SetextBottom1) StartList (!Endline Inline { a = cons(yy, a) })+ Sp? Newline SetextBottom1 { yy = p.mkList(H1, a) }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
@@ -1766,6 +1794,10 @@ func (p *yyParser) Init() {
 			l61:
 				position = position61
 			}
+			if !p.rules[ruleSp]() {
+				goto l64
+			}
+		l64:
 			if !p.rules[ruleNewline]() {
 				goto l58
 			}
@@ -1779,191 +1811,195 @@ func (p *yyParser) Init() {
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 12 SetextHeading2 <- (&(RawLine SetextBottom2) StartList (!Endline Inline { a = cons(yy, a) })+ Newline SetextBottom2 { yy = mk_list(H2, a) }) */
+		/* 12 SetextHeading2 <- (&(RawLine SetextBottom2) StartList (!Endline Inline { a = cons(yy, a) })+ Sp? Newline SetextBottom2 { yy = p.mkList(H2, a) }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
 			{
-				position65 := position
+				position67 := position
 				if !p.rules[ruleRawLine]() {
-					goto l64
+					goto l66
 				}
 				if !p.rules[ruleSetextBottom2]() {
-					goto l64
+					goto l66
 				}
-				position = position65
+				position = position67
 			}
 			if !p.rules[ruleStartList]() {
-				goto l64
+				goto l66
 			}
 			doarg(yySet, -1)
 			if !p.rules[ruleEndline]() {
-				goto l68
+				goto l70
 			}
-			goto l64
-		l68:
+			goto l66
+		l70:
 			if !p.rules[ruleInline]() {
-				goto l64
+				goto l66
 			}
 			do(10)
-		l66:
+		l68:
 			{
-				position67 := position
+				position69 := position
 				if !p.rules[ruleEndline]() {
+					goto l71
+				}
+				goto l69
+			l71:
+				if !p.rules[ruleInline]() {
 					goto l69
 				}
-				goto l67
-			l69:
-				if !p.rules[ruleInline]() {
-					goto l67
-				}
 				do(10)
-				goto l66
-			l67:
-				position = position67
+				goto l68
+			l69:
+				position = position69
 			}
+			if !p.rules[ruleSp]() {
+				goto l72
+			}
+		l72:
 			if !p.rules[ruleNewline]() {
-				goto l64
+				goto l66
 			}
 			if !p.rules[ruleSetextBottom2]() {
-				goto l64
+				goto l66
 			}
 			do(11)
 			doarg(yyPop, 1)
 			return true
-		l64:
+		l66:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 13 Heading <- (AtxHeading / SetextHeading) */
+		/* 13 Heading <- (SetextHeading / AtxHeading) */
 		func() bool {
-			if !p.rules[ruleAtxHeading]() {
-				goto l72
-			}
-			goto l71
-		l72:
 			if !p.rules[ruleSetextHeading]() {
-				goto l70
+				goto l76
 			}
-		l71:
+			goto l75
+		l76:
+			if !p.rules[ruleAtxHeading]() {
+				goto l74
+			}
+		l75:
 			return true
-		l70:
+		l74:
 			return false
 		},
-		/* 14 BlockQuote <- (BlockQuoteRaw {  yy = mk_element(BLOCKQUOTE)
+		/* 14 BlockQuote <- (BlockQuoteRaw {  yy = p.mkElem(BLOCKQUOTE)
                 yy.children = a
              }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
 			if !p.rules[ruleBlockQuoteRaw]() {
-				goto l73
+				goto l77
 			}
 			doarg(yySet, -1)
 			do(12)
 			doarg(yyPop, 1)
 			return true
-		l73:
+		l77:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 15 BlockQuoteRaw <- (StartList ('>' ' '? Line { a = cons(yy, a) } (!'>' !BlankLine Line { a = cons(yy, a) })* (BlankLine { a = cons(mk_str("\n"), a) })*)+ {   yy = mk_str_from_list(a, true)
+		/* 15 BlockQuoteRaw <- (StartList ('>' ' '? Line { a = cons(yy, a) } (!'>' !BlankLine Line { a = cons(yy, a) })* (BlankLine { a = cons(p.mkString("\n"), a) })*)+ {   yy = p.mkStringFromList(a, true)
                      yy.key = RAW
                  }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
 			if !p.rules[ruleStartList]() {
-				goto l74
+				goto l78
 			}
 			doarg(yySet, -1)
 			if !matchChar('>') {
-				goto l74
+				goto l78
 			}
 			matchChar(' ')
 			if !p.rules[ruleLine]() {
-				goto l74
+				goto l78
 			}
 			do(13)
-		l77:
+		l81:
 			{
-				position78, thunkPosition78 := position, thunkPosition
+				position82, thunkPosition82 := position, thunkPosition
 				if peekChar('>') {
-					goto l78
+					goto l82
 				}
 				if !p.rules[ruleBlankLine]() {
-					goto l79
+					goto l83
 				}
-				goto l78
-			l79:
+				goto l82
+			l83:
 				if !p.rules[ruleLine]() {
-					goto l78
+					goto l82
 				}
 				do(14)
-				goto l77
-			l78:
-				position, thunkPosition = position78, thunkPosition78
+				goto l81
+			l82:
+				position, thunkPosition = position82, thunkPosition82
 			}
-		l80:
+		l84:
 			{
-				position81 := position
+				position85 := position
 				if !p.rules[ruleBlankLine]() {
-					goto l81
+					goto l85
 				}
 				do(15)
-				goto l80
-			l81:
-				position = position81
+				goto l84
+			l85:
+				position = position85
 			}
-		l75:
+		l79:
 			{
-				position76, thunkPosition76 := position, thunkPosition
+				position80, thunkPosition80 := position, thunkPosition
 				if !matchChar('>') {
-					goto l76
+					goto l80
 				}
 				matchChar(' ')
 				if !p.rules[ruleLine]() {
-					goto l76
+					goto l80
 				}
 				do(13)
-			l82:
+			l86:
 				{
-					position83, thunkPosition83 := position, thunkPosition
+					position87, thunkPosition87 := position, thunkPosition
 					if peekChar('>') {
-						goto l83
+						goto l87
 					}
 					if !p.rules[ruleBlankLine]() {
-						goto l84
+						goto l88
 					}
-					goto l83
-				l84:
+					goto l87
+				l88:
 					if !p.rules[ruleLine]() {
-						goto l83
+						goto l87
 					}
 					do(14)
-					goto l82
-				l83:
-					position, thunkPosition = position83, thunkPosition83
+					goto l86
+				l87:
+					position, thunkPosition = position87, thunkPosition87
 				}
-			l85:
+			l89:
 				{
-					position86 := position
+					position90 := position
 					if !p.rules[ruleBlankLine]() {
-						goto l86
+						goto l90
 					}
 					do(15)
-					goto l85
-				l86:
-					position = position86
+					goto l89
+				l90:
+					position = position90
 				}
-				goto l75
-			l76:
-				position, thunkPosition = position76, thunkPosition76
+				goto l79
+			l80:
+				position, thunkPosition = position80, thunkPosition80
 			}
 			do(16)
 			doarg(yyPop, 1)
 			return true
-		l74:
+		l78:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
@@ -1971,170 +2007,114 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !p.rules[ruleBlankLine]() {
-				goto l88
+				goto l92
 			}
-			goto l87
-		l88:
+			goto l91
+		l92:
 			if !p.rules[ruleIndentedLine]() {
-				goto l87
+				goto l91
 			}
 			return true
-		l87:
+		l91:
 			position = position0
 			return false
 		},
-		/* 17 VerbatimChunk <- (StartList (BlankLine { a = cons(mk_str("\n"), a) })* (NonblankIndentedLine { a = cons(yy, a) })+ { yy = mk_str_from_list(a, false) }) */
+		/* 17 VerbatimChunk <- (StartList (BlankLine { a = cons(p.mkString("\n"), a) })* (NonblankIndentedLine { a = cons(yy, a) })+ { yy = p.mkStringFromList(a, false) }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
 			if !p.rules[ruleStartList]() {
-				goto l89
+				goto l93
 			}
 			doarg(yySet, -1)
-		l90:
+		l94:
 			{
-				position91 := position
+				position95 := position
 				if !p.rules[ruleBlankLine]() {
-					goto l91
+					goto l95
 				}
 				do(17)
-				goto l90
-			l91:
-				position = position91
+				goto l94
+			l95:
+				position = position95
 			}
 			if !p.rules[ruleNonblankIndentedLine]() {
-				goto l89
+				goto l93
 			}
 			do(18)
-		l92:
+		l96:
 			{
-				position93 := position
+				position97 := position
 				if !p.rules[ruleNonblankIndentedLine]() {
-					goto l93
+					goto l97
 				}
 				do(18)
-				goto l92
-			l93:
-				position = position93
+				goto l96
+			l97:
+				position = position97
 			}
 			do(19)
 			doarg(yyPop, 1)
 			return true
-		l89:
+		l93:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 18 Verbatim <- (StartList (VerbatimChunk { a = cons(yy, a) })+ { yy = mk_str_from_list(a, false)
+		/* 18 Verbatim <- (StartList (VerbatimChunk { a = cons(yy, a) })+ { yy = p.mkStringFromList(a, false)
                  yy.key = VERBATIM }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
 			if !p.rules[ruleStartList]() {
-				goto l94
+				goto l98
 			}
 			doarg(yySet, -1)
 			if !p.rules[ruleVerbatimChunk]() {
-				goto l94
+				goto l98
 			}
 			do(20)
-		l95:
+		l99:
 			{
-				position96, thunkPosition96 := position, thunkPosition
+				position100, thunkPosition100 := position, thunkPosition
 				if !p.rules[ruleVerbatimChunk]() {
-					goto l96
+					goto l100
 				}
 				do(20)
-				goto l95
-			l96:
-				position, thunkPosition = position96, thunkPosition96
+				goto l99
+			l100:
+				position, thunkPosition = position100, thunkPosition100
 			}
 			do(21)
 			doarg(yyPop, 1)
 			return true
-		l94:
+		l98:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 19 HorizontalRule <- (NonindentSpace ((&[_] ('_' Sp '_' Sp '_' (Sp '_')*)) | (&[\-] ('-' Sp '-' Sp '-' (Sp '-')*)) | (&[*] ('*' Sp '*' Sp '*' (Sp '*')*))) Sp Newline BlankLine+ { yy = mk_element(HRULE) }) */
+		/* 19 HorizontalRule <- (NonindentSpace ((&[_] ('_' Sp '_' Sp '_' (Sp '_')*)) | (&[\-] ('-' Sp '-' Sp '-' (Sp '-')*)) | (&[*] ('*' Sp '*' Sp '*' (Sp '*')*))) Sp Newline BlankLine+ { yy = p.mkElem(HRULE) }) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleNonindentSpace]() {
-				goto l97
+				goto l101
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l97
+					goto l101
 				}
 				switch p.Buffer[position] {
 				case '_':
 					position++ // matchChar
 					if !p.rules[ruleSp]() {
-						goto l97
-					}
-					if !matchChar('_') {
-						goto l97
-					}
-					if !p.rules[ruleSp]() {
-						goto l97
-					}
-					if !matchChar('_') {
-						goto l97
-					}
-				l99:
-					{
-						position100 := position
-						if !p.rules[ruleSp]() {
-							goto l100
-						}
-						if !matchChar('_') {
-							goto l100
-						}
-						goto l99
-					l100:
-						position = position100
-					}
-					break
-				case '-':
-					position++ // matchChar
-					if !p.rules[ruleSp]() {
-						goto l97
-					}
-					if !matchChar('-') {
-						goto l97
-					}
-					if !p.rules[ruleSp]() {
-						goto l97
-					}
-					if !matchChar('-') {
-						goto l97
-					}
-				l101:
-					{
-						position102 := position
-						if !p.rules[ruleSp]() {
-							goto l102
-						}
-						if !matchChar('-') {
-							goto l102
-						}
 						goto l101
-					l102:
-						position = position102
 					}
-					break
-				case '*':
-					position++ // matchChar
-					if !p.rules[ruleSp]() {
-						goto l97
-					}
-					if !matchChar('*') {
-						goto l97
+					if !matchChar('_') {
+						goto l101
 					}
 					if !p.rules[ruleSp]() {
-						goto l97
+						goto l101
 					}
-					if !matchChar('*') {
-						goto l97
+					if !matchChar('_') {
+						goto l101
 					}
 				l103:
 					{
@@ -2142,7 +2122,7 @@ func (p *yyParser) Init() {
 						if !p.rules[ruleSp]() {
 							goto l104
 						}
-						if !matchChar('*') {
+						if !matchChar('_') {
 							goto l104
 						}
 						goto l103
@@ -2150,28 +2130,84 @@ func (p *yyParser) Init() {
 						position = position104
 					}
 					break
+				case '-':
+					position++ // matchChar
+					if !p.rules[ruleSp]() {
+						goto l101
+					}
+					if !matchChar('-') {
+						goto l101
+					}
+					if !p.rules[ruleSp]() {
+						goto l101
+					}
+					if !matchChar('-') {
+						goto l101
+					}
+				l105:
+					{
+						position106 := position
+						if !p.rules[ruleSp]() {
+							goto l106
+						}
+						if !matchChar('-') {
+							goto l106
+						}
+						goto l105
+					l106:
+						position = position106
+					}
+					break
+				case '*':
+					position++ // matchChar
+					if !p.rules[ruleSp]() {
+						goto l101
+					}
+					if !matchChar('*') {
+						goto l101
+					}
+					if !p.rules[ruleSp]() {
+						goto l101
+					}
+					if !matchChar('*') {
+						goto l101
+					}
+				l107:
+					{
+						position108 := position
+						if !p.rules[ruleSp]() {
+							goto l108
+						}
+						if !matchChar('*') {
+							goto l108
+						}
+						goto l107
+					l108:
+						position = position108
+					}
+					break
 				default:
-					goto l97
+					goto l101
 				}
 			}
 			if !p.rules[ruleSp]() {
-				goto l97
+				goto l101
 			}
 			if !p.rules[ruleNewline]() {
-				goto l97
+				goto l101
 			}
 			if !p.rules[ruleBlankLine]() {
-				goto l97
+				goto l101
 			}
-		l105:
+		l109:
 			if !p.rules[ruleBlankLine]() {
-				goto l106
+				goto l110
 			}
-			goto l105
-		l106:
+			goto l109
+		l110:
 			do(22)
 			return true
-		l97:
+		l101:
 			position = position0
 			return false
 		},
@@ -2179,16 +2215,16 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			if !p.rules[ruleHorizontalRule]() {
-				goto l108
+				goto l112
 			}
-			goto l107
-		l108:
+			goto l111
+		l112:
 			if !p.rules[ruleNonindentSpace]() {
-				goto l107
+				goto l111
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l107
+					goto l111
 				}
 				switch p.Buffer[position] {
 				case '-':
@@ -2201,20 +2237,20 @@ func (p *yyParser) Init() {
 					position++ // matchChar
 					break
 				default:
-					goto l107
+					goto l111
 				}
 			}
 			if !p.rules[ruleSpacechar]() {
-				goto l107
-			}
-		l110:
-			if !p.rules[ruleSpacechar]() {
 				goto l111
 			}
-			goto l110
-		l111:
+		l114:
+			if !p.rules[ruleSpacechar]() {
+				goto l115
+			}
+			goto l114
+		l115:
 			return true
-		l107:
+		l111:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
@@ -2222,83 +2258,83 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			{
-				position113 := position
+				position117 := position
 				if !p.rules[ruleBullet]() {
-					goto l112
+					goto l116
 				}
-				position = position113
+				position = position117
 			}
 			if !p.rules[ruleListTight]() {
-				goto l115
+				goto l119
 			}
-			goto l114
-		l115:
+			goto l118
+		l119:
 			if !p.rules[ruleListLoose]() {
-				goto l112
+				goto l116
 			}
-		l114:
+		l118:
 			do(23)
 			return true
-		l112:
+		l116:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 22 ListTight <- (StartList (ListItemTight { a = cons(yy, a) })+ BlankLine* !((&[:~] DefMarker) | (&[*+\-] Bullet) | (&[0-9] Enumerator)) { yy = mk_list(LIST, a) }) */
+		/* 22 ListTight <- (StartList (ListItemTight { a = cons(yy, a) })+ BlankLine* !((&[:~] DefMarker) | (&[*+\-] Bullet) | (&[0-9] Enumerator)) { yy = p.mkList(LIST, a) }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
 			if !p.rules[ruleStartList]() {
-				goto l116
+				goto l120
 			}
 			doarg(yySet, -1)
 			if !p.rules[ruleListItemTight]() {
-				goto l116
-			}
-			do(24)
-		l117:
-			{
-				position118, thunkPosition118 := position, thunkPosition
-				if !p.rules[ruleListItemTight]() {
-					goto l118
-				}
-				do(24)
-				goto l117
-			l118:
-				position, thunkPosition = position118, thunkPosition118
-			}
-		l119:
-			if !p.rules[ruleBlankLine]() {
 				goto l120
 			}
-			goto l119
-		l120:
+			do(24)
+		l121:
+			{
+				position122, thunkPosition122 := position, thunkPosition
+				if !p.rules[ruleListItemTight]() {
+					goto l122
+				}
+				do(24)
+				goto l121
+			l122:
+				position, thunkPosition = position122, thunkPosition122
+			}
+		l123:
+			if !p.rules[ruleBlankLine]() {
+				goto l124
+			}
+			goto l123
+		l124:
 			{
 				if position == len(p.Buffer) {
-					goto l121
+					goto l125
 				}
 				switch p.Buffer[position] {
 				case ':', '~':
 					if !p.rules[ruleDefMarker]() {
-						goto l121
+						goto l125
 					}
 					break
 				case '*', '+', '-':
 					if !p.rules[ruleBullet]() {
-						goto l121
+						goto l125
 					}
 					break
 				default:
 					if !p.rules[ruleEnumerator]() {
-						goto l121
+						goto l125
 					}
 				}
 			}
-			goto l116
-		l121:
+			goto l120
+		l125:
 			do(25)
 			doarg(yyPop, 1)
 			return true
-		l116:
+		l120:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
@@ -2306,110 +2342,54 @@ func (p *yyParser) Init() {
                   li := b.children
                   li.contents.str += "\n\n"
                   a = cons(b, a)
-              })+ { yy = mk_list(LIST, a) }) */
+              })+ { yy = p.mkList(LIST, a) }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 2)
 			if !p.rules[ruleStartList]() {
-				goto l123
-			}
-			doarg(yySet, -1)
-			if !p.rules[ruleListItem]() {
-				goto l123
-			}
-			doarg(yySet, -2)
-		l126:
-			if !p.rules[ruleBlankLine]() {
 				goto l127
 			}
-			goto l126
-		l127:
+			doarg(yySet, -2)
+			if !p.rules[ruleListItem]() {
+				goto l127
+			}
+			doarg(yySet, -1)
+		l130:
+			if !p.rules[ruleBlankLine]() {
+				goto l131
+			}
+			goto l130
+		l131:
 			do(26)
-		l124:
+		l128:
 			{
-				position125, thunkPosition125 := position, thunkPosition
+				position129, thunkPosition129 := position, thunkPosition
 				if !p.rules[ruleListItem]() {
-					goto l125
-				}
-				doarg(yySet, -2)
-			l128:
-				if !p.rules[ruleBlankLine]() {
 					goto l129
 				}
+				doarg(yySet, -1)
+			l132:
+				if !p.rules[ruleBlankLine]() {
+					goto l133
+				}
+				goto l132
+			l133:
+				do(26)
 				goto l128
 			l129:
-				do(26)
-				goto l124
-			l125:
-				position, thunkPosition = position125, thunkPosition125
+				position, thunkPosition = position129, thunkPosition129
 			}
 			do(27)
 			doarg(yyPop, 2)
 			return true
-		l123:
+		l127:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
 		/* 24 ListItem <- (((&[:~] DefMarker) | (&[*+\-] Bullet) | (&[0-9] Enumerator)) StartList ListBlock { a = cons(yy, a) } (ListContinuationBlock { a = cons(yy, a) })* {
-               raw := mk_str_from_list(a, false)
+               raw := p.mkStringFromList(a, false)
                raw.key = RAW
-               yy = mk_element(LISTITEM)
-               yy.children = raw
-            }) */
-		func() bool {
-			position0, thunkPosition0 := position, thunkPosition
-			doarg(yyPush, 1)
-			{
-				if position == len(p.Buffer) {
-					goto l130
-				}
-				switch p.Buffer[position] {
-				case ':', '~':
-					if !p.rules[ruleDefMarker]() {
-						goto l130
-					}
-					break
-				case '*', '+', '-':
-					if !p.rules[ruleBullet]() {
-						goto l130
-					}
-					break
-				default:
-					if !p.rules[ruleEnumerator]() {
-						goto l130
-					}
-				}
-			}
-			if !p.rules[ruleStartList]() {
-				goto l130
-			}
-			doarg(yySet, -1)
-			if !p.rules[ruleListBlock]() {
-				goto l130
-			}
-			do(28)
-		l132:
-			{
-				position133, thunkPosition133 := position, thunkPosition
-				if !p.rules[ruleListContinuationBlock]() {
-					goto l133
-				}
-				do(29)
-				goto l132
-			l133:
-				position, thunkPosition = position133, thunkPosition133
-			}
-			do(30)
-			doarg(yyPop, 1)
-			return true
-		l130:
-			position, thunkPosition = position0, thunkPosition0
-			return false
-		},
-		/* 25 ListItemTight <- (((&[:~] DefMarker) | (&[*+\-] Bullet) | (&[0-9] Enumerator)) StartList ListBlock { a = cons(yy, a) } (!BlankLine ListContinuationBlock { a = cons(yy, a) })* !ListContinuationBlock {
-               raw := mk_str_from_list(a, false)
-               raw.key = RAW
-               yy = mk_element(LISTITEM)
+               yy = p.mkElem(LISTITEM)
                yy.children = raw
             }) */
 		func() bool {
@@ -2443,117 +2423,173 @@ func (p *yyParser) Init() {
 			if !p.rules[ruleListBlock]() {
 				goto l134
 			}
-			do(31)
+			do(28)
 		l136:
 			{
 				position137, thunkPosition137 := position, thunkPosition
-				if !p.rules[ruleBlankLine]() {
-					goto l138
-				}
-				goto l137
-			l138:
 				if !p.rules[ruleListContinuationBlock]() {
 					goto l137
 				}
-				do(32)
+				do(29)
 				goto l136
 			l137:
 				position, thunkPosition = position137, thunkPosition137
 			}
-			if !p.rules[ruleListContinuationBlock]() {
-				goto l139
-			}
-			goto l134
-		l139:
-			do(33)
+			do(30)
 			doarg(yyPop, 1)
 			return true
 		l134:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 26 ListBlock <- (StartList !BlankLine Line { a = cons(yy, a) } (ListBlockLine { a = cons(yy, a) })* { yy = mk_str_from_list(a, false) }) */
+		/* 25 ListItemTight <- (((&[:~] DefMarker) | (&[*+\-] Bullet) | (&[0-9] Enumerator)) StartList ListBlock { a = cons(yy, a) } (!BlankLine ListContinuationBlock { a = cons(yy, a) })* !ListContinuationBlock {
+               raw := p.mkStringFromList(a, false)
+               raw.key = RAW
+               yy = p.mkElem(LISTITEM)
+               yy.children = raw
+            }) */
+		func() bool {
+			position0, thunkPosition0 := position, thunkPosition
+			doarg(yyPush, 1)
+			{
+				if position == len(p.Buffer) {
+					goto l138
+				}
+				switch p.Buffer[position] {
+				case ':', '~':
+					if !p.rules[ruleDefMarker]() {
+						goto l138
+					}
+					break
+				case '*', '+', '-':
+					if !p.rules[ruleBullet]() {
+						goto l138
+					}
+					break
+				default:
+					if !p.rules[ruleEnumerator]() {
+						goto l138
+					}
+				}
+			}
+			if !p.rules[ruleStartList]() {
+				goto l138
+			}
+			doarg(yySet, -1)
+			if !p.rules[ruleListBlock]() {
+				goto l138
+			}
+			do(31)
+		l140:
+			{
+				position141, thunkPosition141 := position, thunkPosition
+				if !p.rules[ruleBlankLine]() {
+					goto l142
+				}
+				goto l141
+			l142:
+				if !p.rules[ruleListContinuationBlock]() {
+					goto l141
+				}
+				do(32)
+				goto l140
+			l141:
+				position, thunkPosition = position141, thunkPosition141
+			}
+			if !p.rules[ruleListContinuationBlock]() {
+				goto l143
+			}
+			goto l138
+		l143:
+			do(33)
+			doarg(yyPop, 1)
+			return true
+		l138:
+			position, thunkPosition = position0, thunkPosition0
+			return false
+		},
+		/* 26 ListBlock <- (StartList !BlankLine Line { a = cons(yy, a) } (ListBlockLine { a = cons(yy, a) })* { yy = p.mkStringFromList(a, false) }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
 			if !p.rules[ruleStartList]() {
-				goto l140
+				goto l144
 			}
 			doarg(yySet, -1)
 			if !p.rules[ruleBlankLine]() {
-				goto l141
+				goto l145
 			}
-			goto l140
-		l141:
+			goto l144
+		l145:
 			if !p.rules[ruleLine]() {
-				goto l140
+				goto l144
 			}
 			do(34)
-		l142:
+		l146:
 			{
-				position143 := position
+				position147 := position
 				if !p.rules[ruleListBlockLine]() {
-					goto l143
+					goto l147
 				}
 				do(35)
-				goto l142
-			l143:
-				position = position143
+				goto l146
+			l147:
+				position = position147
 			}
 			do(36)
 			doarg(yyPop, 1)
 			return true
-		l140:
+		l144:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
 		/* 27 ListContinuationBlock <- (StartList (< BlankLine* > {   if len(yytext) == 0 {
-                                   a = cons(mk_str("\001"), a) // block separator
+                                   a = cons(p.mkString("\001"), a) // block separator
                               } else {
-                                   a = cons(mk_str(yytext), a)
+                                   a = cons(p.mkString(yytext), a)
                               }
-                          }) (Indent ListBlock { a = cons(yy, a) })+ {  yy = mk_str_from_list(a, false) }) */
+                          }) (Indent ListBlock { a = cons(yy, a) })+ {  yy = p.mkStringFromList(a, false) }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
 			if !p.rules[ruleStartList]() {
-				goto l144
+				goto l148
 			}
 			doarg(yySet, -1)
 			begin = position
-		l145:
+		l149:
 			if !p.rules[ruleBlankLine]() {
-				goto l146
+				goto l150
 			}
-			goto l145
-		l146:
+			goto l149
+		l150:
 			end = position
 			do(37)
 			if !p.rules[ruleIndent]() {
-				goto l144
+				goto l148
 			}
 			if !p.rules[ruleListBlock]() {
-				goto l144
+				goto l148
 			}
 			do(38)
-		l147:
+		l151:
 			{
-				position148, thunkPosition148 := position, thunkPosition
+				position152, thunkPosition152 := position, thunkPosition
 				if !p.rules[ruleIndent]() {
-					goto l148
+					goto l152
 				}
 				if !p.rules[ruleListBlock]() {
-					goto l148
+					goto l152
 				}
 				do(38)
-				goto l147
-			l148:
-				position, thunkPosition = position148, thunkPosition148
+				goto l151
+			l152:
+				position, thunkPosition = position152, thunkPosition152
 			}
 			do(39)
 			doarg(yyPop, 1)
 			return true
-		l144:
+		l148:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
@@ -2561,31 +2597,31 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !p.rules[ruleNonindentSpace]() {
-				goto l149
+				goto l153
 			}
 			if !matchClass(0) {
-				goto l149
+				goto l153
 			}
-		l150:
+		l154:
 			if !matchClass(0) {
-				goto l151
+				goto l155
 			}
-			goto l150
-		l151:
+			goto l154
+		l155:
 			if !matchChar('.') {
-				goto l149
+				goto l153
 			}
-			if !p.rules[ruleSpacechar]() {
-				goto l149
-			}
-		l152:
 			if !p.rules[ruleSpacechar]() {
 				goto l153
 			}
-			goto l152
-		l153:
+		l156:
+			if !p.rules[ruleSpacechar]() {
+				goto l157
+			}
+			goto l156
+		l157:
 			return true
-		l149:
+		l153:
 			position = position0
 			return false
 		},
@@ -2593,24 +2629,24 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			{
-				position155 := position
+				position159 := position
 				if !p.rules[ruleEnumerator]() {
-					goto l154
+					goto l158
 				}
-				position = position155
+				position = position159
 			}
 			if !p.rules[ruleListTight]() {
-				goto l157
+				goto l161
 			}
-			goto l156
-		l157:
+			goto l160
+		l161:
 			if !p.rules[ruleListLoose]() {
-				goto l154
+				goto l158
 			}
-		l156:
+		l160:
 			do(40)
 			return true
-		l154:
+		l158:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
@@ -2618,59 +2654,59 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			if !p.rules[ruleBlankLine]() {
-				goto l159
+				goto l163
 			}
-			goto l158
-		l159:
+			goto l162
+		l163:
 			{
-				position160 := position
+				position164 := position
 				{
 					if position == len(p.Buffer) {
-						goto l160
+						goto l164
 					}
 					switch p.Buffer[position] {
 					case ':', '~':
 						if !p.rules[ruleDefMarker]() {
-							goto l160
+							goto l164
 						}
 						break
 					default:
 						if !p.rules[ruleIndent]() {
-							goto l162
+							goto l166
 						}
-					l162:
+					l166:
 						{
 							if position == len(p.Buffer) {
-								goto l160
+								goto l164
 							}
 							switch p.Buffer[position] {
 							case '*', '+', '-':
 								if !p.rules[ruleBullet]() {
-									goto l160
+									goto l164
 								}
 								break
 							default:
 								if !p.rules[ruleEnumerator]() {
-									goto l160
+									goto l164
 								}
 							}
 						}
 					}
 				}
-				goto l158
-			l160:
-				position = position160
+				goto l162
+			l164:
+				position = position164
 			}
 			if !p.rules[ruleHorizontalRule]() {
-				goto l165
+				goto l169
 			}
-			goto l158
-		l165:
+			goto l162
+		l169:
 			if !p.rules[ruleOptionallyIndentedLine]() {
-				goto l158
+				goto l162
 			}
 			return true
-		l158:
+		l162:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
@@ -2678,85 +2714,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l166
+				goto l170
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l166
+				goto l170
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l166
+					goto l170
 				}
 				switch p.Buffer[position] {
 				case 'A':
 					position++
 					if !matchString("DDRESS") {
-						goto l166
+						goto l170
 					}
 					break
 				case 'a':
 					position++
 					if !matchString("ddress") {
-						goto l166
+						goto l170
 					}
 					break
 				default:
-					goto l166
+					goto l170
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l166
+				goto l170
 			}
-		l168:
+		l172:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l169
+				goto l173
 			}
-			goto l168
-		l169:
-			if !matchChar('>') {
-				goto l166
-			}
-			return true
-		l166:
-			position = position0
-			return false
-		},
-		/* 32 HtmlBlockCloseAddress <- ('<' Spnl '/' ((&[A] 'ADDRESS') | (&[a] 'address')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l170
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l170
-			}
-			if !matchChar('/') {
-				goto l170
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l170
-				}
-				switch p.Buffer[position] {
-				case 'A':
-					position++
-					if !matchString("DDRESS") {
-						goto l170
-					}
-					break
-				case 'a':
-					position++
-					if !matchString("ddress") {
-						goto l170
-					}
-					break
-				default:
-					goto l170
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l170
-			}
+			goto l172
+		l173:
 			if !matchChar('>') {
 				goto l170
 			}
@@ -2765,38 +2757,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 32 HtmlBlockCloseAddress <- ('<' Spnl '/' ((&[A] 'ADDRESS') | (&[a] 'address')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l174
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l174
+			}
+			if !matchChar('/') {
+				goto l174
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l174
+				}
+				switch p.Buffer[position] {
+				case 'A':
+					position++
+					if !matchString("DDRESS") {
+						goto l174
+					}
+					break
+				case 'a':
+					position++
+					if !matchString("ddress") {
+						goto l174
+					}
+					break
+				default:
+					goto l174
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l174
+			}
+			if !matchChar('>') {
+				goto l174
+			}
+			return true
+		l174:
+			position = position0
+			return false
+		},
 		/* 33 HtmlBlockAddress <- (HtmlBlockOpenAddress (HtmlBlockAddress / (!HtmlBlockCloseAddress .))* HtmlBlockCloseAddress) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenAddress]() {
-				goto l172
+				goto l176
 			}
-		l173:
+		l177:
 			{
-				position174 := position
+				position178 := position
 				if !p.rules[ruleHtmlBlockAddress]() {
-					goto l176
+					goto l180
 				}
-				goto l175
-			l176:
+				goto l179
+			l180:
 				if !p.rules[ruleHtmlBlockCloseAddress]() {
-					goto l177
+					goto l181
 				}
-				goto l174
-			l177:
+				goto l178
+			l181:
 				if !matchDot() {
-					goto l174
+					goto l178
 				}
-			l175:
-				goto l173
-			l174:
-				position = position174
+			l179:
+				goto l177
+			l178:
+				position = position178
 			}
 			if !p.rules[ruleHtmlBlockCloseAddress]() {
-				goto l172
+				goto l176
 			}
 			return true
-		l172:
+		l176:
 			position = position0
 			return false
 		},
@@ -2804,85 +2840,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l178
+				goto l182
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l178
+				goto l182
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l178
+					goto l182
 				}
 				switch p.Buffer[position] {
 				case 'B':
 					position++
 					if !matchString("LOCKQUOTE") {
-						goto l178
+						goto l182
 					}
 					break
 				case 'b':
 					position++
 					if !matchString("lockquote") {
-						goto l178
+						goto l182
 					}
 					break
 				default:
-					goto l178
+					goto l182
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l178
+				goto l182
 			}
-		l180:
+		l184:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l181
+				goto l185
 			}
-			goto l180
-		l181:
-			if !matchChar('>') {
-				goto l178
-			}
-			return true
-		l178:
-			position = position0
-			return false
-		},
-		/* 35 HtmlBlockCloseBlockquote <- ('<' Spnl '/' ((&[B] 'BLOCKQUOTE') | (&[b] 'blockquote')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l182
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l182
-			}
-			if !matchChar('/') {
-				goto l182
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l182
-				}
-				switch p.Buffer[position] {
-				case 'B':
-					position++
-					if !matchString("LOCKQUOTE") {
-						goto l182
-					}
-					break
-				case 'b':
-					position++
-					if !matchString("lockquote") {
-						goto l182
-					}
-					break
-				default:
-					goto l182
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l182
-			}
+			goto l184
+		l185:
 			if !matchChar('>') {
 				goto l182
 			}
@@ -2891,38 +2883,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 35 HtmlBlockCloseBlockquote <- ('<' Spnl '/' ((&[B] 'BLOCKQUOTE') | (&[b] 'blockquote')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l186
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l186
+			}
+			if !matchChar('/') {
+				goto l186
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l186
+				}
+				switch p.Buffer[position] {
+				case 'B':
+					position++
+					if !matchString("LOCKQUOTE") {
+						goto l186
+					}
+					break
+				case 'b':
+					position++
+					if !matchString("lockquote") {
+						goto l186
+					}
+					break
+				default:
+					goto l186
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l186
+			}
+			if !matchChar('>') {
+				goto l186
+			}
+			return true
+		l186:
+			position = position0
+			return false
+		},
 		/* 36 HtmlBlockBlockquote <- (HtmlBlockOpenBlockquote (HtmlBlockBlockquote / (!HtmlBlockCloseBlockquote .))* HtmlBlockCloseBlockquote) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenBlockquote]() {
-				goto l184
+				goto l188
 			}
-		l185:
+		l189:
 			{
-				position186 := position
+				position190 := position
 				if !p.rules[ruleHtmlBlockBlockquote]() {
-					goto l188
+					goto l192
 				}
-				goto l187
-			l188:
+				goto l191
+			l192:
 				if !p.rules[ruleHtmlBlockCloseBlockquote]() {
-					goto l189
+					goto l193
 				}
-				goto l186
-			l189:
+				goto l190
+			l193:
 				if !matchDot() {
-					goto l186
+					goto l190
 				}
-			l187:
-				goto l185
-			l186:
-				position = position186
+			l191:
+				goto l189
+			l190:
+				position = position190
 			}
 			if !p.rules[ruleHtmlBlockCloseBlockquote]() {
-				goto l184
+				goto l188
 			}
 			return true
-		l184:
+		l188:
 			position = position0
 			return false
 		},
@@ -2930,85 +2966,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l190
+				goto l194
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l190
+				goto l194
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l190
+					goto l194
 				}
 				switch p.Buffer[position] {
 				case 'C':
 					position++
 					if !matchString("ENTER") {
-						goto l190
+						goto l194
 					}
 					break
 				case 'c':
 					position++
 					if !matchString("enter") {
-						goto l190
+						goto l194
 					}
 					break
 				default:
-					goto l190
+					goto l194
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l190
+				goto l194
 			}
-		l192:
+		l196:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l193
+				goto l197
 			}
-			goto l192
-		l193:
-			if !matchChar('>') {
-				goto l190
-			}
-			return true
-		l190:
-			position = position0
-			return false
-		},
-		/* 38 HtmlBlockCloseCenter <- ('<' Spnl '/' ((&[C] 'CENTER') | (&[c] 'center')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l194
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l194
-			}
-			if !matchChar('/') {
-				goto l194
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l194
-				}
-				switch p.Buffer[position] {
-				case 'C':
-					position++
-					if !matchString("ENTER") {
-						goto l194
-					}
-					break
-				case 'c':
-					position++
-					if !matchString("enter") {
-						goto l194
-					}
-					break
-				default:
-					goto l194
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l194
-			}
+			goto l196
+		l197:
 			if !matchChar('>') {
 				goto l194
 			}
@@ -3017,38 +3009,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 38 HtmlBlockCloseCenter <- ('<' Spnl '/' ((&[C] 'CENTER') | (&[c] 'center')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l198
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l198
+			}
+			if !matchChar('/') {
+				goto l198
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l198
+				}
+				switch p.Buffer[position] {
+				case 'C':
+					position++
+					if !matchString("ENTER") {
+						goto l198
+					}
+					break
+				case 'c':
+					position++
+					if !matchString("enter") {
+						goto l198
+					}
+					break
+				default:
+					goto l198
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l198
+			}
+			if !matchChar('>') {
+				goto l198
+			}
+			return true
+		l198:
+			position = position0
+			return false
+		},
 		/* 39 HtmlBlockCenter <- (HtmlBlockOpenCenter (HtmlBlockCenter / (!HtmlBlockCloseCenter .))* HtmlBlockCloseCenter) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenCenter]() {
-				goto l196
+				goto l200
 			}
-		l197:
+		l201:
 			{
-				position198 := position
+				position202 := position
 				if !p.rules[ruleHtmlBlockCenter]() {
-					goto l200
+					goto l204
 				}
-				goto l199
-			l200:
+				goto l203
+			l204:
 				if !p.rules[ruleHtmlBlockCloseCenter]() {
-					goto l201
+					goto l205
 				}
-				goto l198
-			l201:
+				goto l202
+			l205:
 				if !matchDot() {
-					goto l198
+					goto l202
 				}
-			l199:
-				goto l197
-			l198:
-				position = position198
+			l203:
+				goto l201
+			l202:
+				position = position202
 			}
 			if !p.rules[ruleHtmlBlockCloseCenter]() {
-				goto l196
+				goto l200
 			}
 			return true
-		l196:
+		l200:
 			position = position0
 			return false
 		},
@@ -3056,85 +3092,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l202
+				goto l206
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l202
+				goto l206
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l202
+					goto l206
 				}
 				switch p.Buffer[position] {
 				case 'D':
 					position++
 					if !matchString("IR") {
-						goto l202
+						goto l206
 					}
 					break
 				case 'd':
 					position++
 					if !matchString("ir") {
-						goto l202
+						goto l206
 					}
 					break
 				default:
-					goto l202
+					goto l206
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l202
+				goto l206
 			}
-		l204:
+		l208:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l205
+				goto l209
 			}
-			goto l204
-		l205:
-			if !matchChar('>') {
-				goto l202
-			}
-			return true
-		l202:
-			position = position0
-			return false
-		},
-		/* 41 HtmlBlockCloseDir <- ('<' Spnl '/' ((&[D] 'DIR') | (&[d] 'dir')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l206
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l206
-			}
-			if !matchChar('/') {
-				goto l206
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l206
-				}
-				switch p.Buffer[position] {
-				case 'D':
-					position++
-					if !matchString("IR") {
-						goto l206
-					}
-					break
-				case 'd':
-					position++
-					if !matchString("ir") {
-						goto l206
-					}
-					break
-				default:
-					goto l206
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l206
-			}
+			goto l208
+		l209:
 			if !matchChar('>') {
 				goto l206
 			}
@@ -3143,38 +3135,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 41 HtmlBlockCloseDir <- ('<' Spnl '/' ((&[D] 'DIR') | (&[d] 'dir')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l210
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l210
+			}
+			if !matchChar('/') {
+				goto l210
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l210
+				}
+				switch p.Buffer[position] {
+				case 'D':
+					position++
+					if !matchString("IR") {
+						goto l210
+					}
+					break
+				case 'd':
+					position++
+					if !matchString("ir") {
+						goto l210
+					}
+					break
+				default:
+					goto l210
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l210
+			}
+			if !matchChar('>') {
+				goto l210
+			}
+			return true
+		l210:
+			position = position0
+			return false
+		},
 		/* 42 HtmlBlockDir <- (HtmlBlockOpenDir (HtmlBlockDir / (!HtmlBlockCloseDir .))* HtmlBlockCloseDir) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenDir]() {
-				goto l208
+				goto l212
 			}
-		l209:
+		l213:
 			{
-				position210 := position
+				position214 := position
 				if !p.rules[ruleHtmlBlockDir]() {
-					goto l212
+					goto l216
 				}
-				goto l211
-			l212:
+				goto l215
+			l216:
 				if !p.rules[ruleHtmlBlockCloseDir]() {
-					goto l213
+					goto l217
 				}
-				goto l210
-			l213:
+				goto l214
+			l217:
 				if !matchDot() {
-					goto l210
+					goto l214
 				}
-			l211:
-				goto l209
-			l210:
-				position = position210
+			l215:
+				goto l213
+			l214:
+				position = position214
 			}
 			if !p.rules[ruleHtmlBlockCloseDir]() {
-				goto l208
+				goto l212
 			}
 			return true
-		l208:
+		l212:
 			position = position0
 			return false
 		},
@@ -3182,85 +3218,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l214
+				goto l218
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l214
+				goto l218
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l214
+					goto l218
 				}
 				switch p.Buffer[position] {
 				case 'D':
 					position++
 					if !matchString("IV") {
-						goto l214
+						goto l218
 					}
 					break
 				case 'd':
 					position++
 					if !matchString("iv") {
-						goto l214
+						goto l218
 					}
 					break
 				default:
-					goto l214
+					goto l218
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l214
+				goto l218
 			}
-		l216:
+		l220:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l217
+				goto l221
 			}
-			goto l216
-		l217:
-			if !matchChar('>') {
-				goto l214
-			}
-			return true
-		l214:
-			position = position0
-			return false
-		},
-		/* 44 HtmlBlockCloseDiv <- ('<' Spnl '/' ((&[D] 'DIV') | (&[d] 'div')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l218
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l218
-			}
-			if !matchChar('/') {
-				goto l218
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l218
-				}
-				switch p.Buffer[position] {
-				case 'D':
-					position++
-					if !matchString("IV") {
-						goto l218
-					}
-					break
-				case 'd':
-					position++
-					if !matchString("iv") {
-						goto l218
-					}
-					break
-				default:
-					goto l218
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l218
-			}
+			goto l220
+		l221:
 			if !matchChar('>') {
 				goto l218
 			}
@@ -3269,38 +3261,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 44 HtmlBlockCloseDiv <- ('<' Spnl '/' ((&[D] 'DIV') | (&[d] 'div')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l222
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l222
+			}
+			if !matchChar('/') {
+				goto l222
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l222
+				}
+				switch p.Buffer[position] {
+				case 'D':
+					position++
+					if !matchString("IV") {
+						goto l222
+					}
+					break
+				case 'd':
+					position++
+					if !matchString("iv") {
+						goto l222
+					}
+					break
+				default:
+					goto l222
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l222
+			}
+			if !matchChar('>') {
+				goto l222
+			}
+			return true
+		l222:
+			position = position0
+			return false
+		},
 		/* 45 HtmlBlockDiv <- (HtmlBlockOpenDiv (HtmlBlockDiv / (!HtmlBlockCloseDiv .))* HtmlBlockCloseDiv) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenDiv]() {
-				goto l220
+				goto l224
 			}
-		l221:
+		l225:
 			{
-				position222 := position
+				position226 := position
 				if !p.rules[ruleHtmlBlockDiv]() {
-					goto l224
+					goto l228
 				}
-				goto l223
-			l224:
+				goto l227
+			l228:
 				if !p.rules[ruleHtmlBlockCloseDiv]() {
-					goto l225
+					goto l229
 				}
-				goto l222
-			l225:
+				goto l226
+			l229:
 				if !matchDot() {
-					goto l222
+					goto l226
 				}
-			l223:
-				goto l221
-			l222:
-				position = position222
+			l227:
+				goto l225
+			l226:
+				position = position226
 			}
 			if !p.rules[ruleHtmlBlockCloseDiv]() {
-				goto l220
+				goto l224
 			}
 			return true
-		l220:
+		l224:
 			position = position0
 			return false
 		},
@@ -3308,85 +3344,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l226
+				goto l230
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l226
+				goto l230
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l226
+					goto l230
 				}
 				switch p.Buffer[position] {
 				case 'D':
 					position++ // matchString(`DL`)
 					if !matchChar('L') {
-						goto l226
+						goto l230
 					}
 					break
 				case 'd':
 					position++ // matchString(`dl`)
 					if !matchChar('l') {
-						goto l226
+						goto l230
 					}
 					break
 				default:
-					goto l226
+					goto l230
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l226
+				goto l230
 			}
-		l228:
+		l232:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l229
+				goto l233
 			}
-			goto l228
-		l229:
-			if !matchChar('>') {
-				goto l226
-			}
-			return true
-		l226:
-			position = position0
-			return false
-		},
-		/* 47 HtmlBlockCloseDl <- ('<' Spnl '/' ((&[D] 'DL') | (&[d] 'dl')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l230
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l230
-			}
-			if !matchChar('/') {
-				goto l230
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l230
-				}
-				switch p.Buffer[position] {
-				case 'D':
-					position++ // matchString(`DL`)
-					if !matchChar('L') {
-						goto l230
-					}
-					break
-				case 'd':
-					position++ // matchString(`dl`)
-					if !matchChar('l') {
-						goto l230
-					}
-					break
-				default:
-					goto l230
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l230
-			}
+			goto l232
+		l233:
 			if !matchChar('>') {
 				goto l230
 			}
@@ -3395,38 +3387,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 47 HtmlBlockCloseDl <- ('<' Spnl '/' ((&[D] 'DL') | (&[d] 'dl')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l234
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l234
+			}
+			if !matchChar('/') {
+				goto l234
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l234
+				}
+				switch p.Buffer[position] {
+				case 'D':
+					position++ // matchString(`DL`)
+					if !matchChar('L') {
+						goto l234
+					}
+					break
+				case 'd':
+					position++ // matchString(`dl`)
+					if !matchChar('l') {
+						goto l234
+					}
+					break
+				default:
+					goto l234
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l234
+			}
+			if !matchChar('>') {
+				goto l234
+			}
+			return true
+		l234:
+			position = position0
+			return false
+		},
 		/* 48 HtmlBlockDl <- (HtmlBlockOpenDl (HtmlBlockDl / (!HtmlBlockCloseDl .))* HtmlBlockCloseDl) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenDl]() {
-				goto l232
+				goto l236
 			}
-		l233:
+		l237:
 			{
-				position234 := position
+				position238 := position
 				if !p.rules[ruleHtmlBlockDl]() {
-					goto l236
+					goto l240
 				}
-				goto l235
-			l236:
+				goto l239
+			l240:
 				if !p.rules[ruleHtmlBlockCloseDl]() {
-					goto l237
+					goto l241
 				}
-				goto l234
-			l237:
+				goto l238
+			l241:
 				if !matchDot() {
-					goto l234
+					goto l238
 				}
-			l235:
-				goto l233
-			l234:
-				position = position234
+			l239:
+				goto l237
+			l238:
+				position = position238
 			}
 			if !p.rules[ruleHtmlBlockCloseDl]() {
-				goto l232
+				goto l236
 			}
 			return true
-		l232:
+		l236:
 			position = position0
 			return false
 		},
@@ -3434,85 +3470,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l238
+				goto l242
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l238
+				goto l242
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l238
+					goto l242
 				}
 				switch p.Buffer[position] {
 				case 'F':
 					position++
 					if !matchString("IELDSET") {
-						goto l238
+						goto l242
 					}
 					break
 				case 'f':
 					position++
 					if !matchString("ieldset") {
-						goto l238
+						goto l242
 					}
 					break
 				default:
-					goto l238
+					goto l242
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l238
+				goto l242
 			}
-		l240:
+		l244:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l241
+				goto l245
 			}
-			goto l240
-		l241:
-			if !matchChar('>') {
-				goto l238
-			}
-			return true
-		l238:
-			position = position0
-			return false
-		},
-		/* 50 HtmlBlockCloseFieldset <- ('<' Spnl '/' ((&[F] 'FIELDSET') | (&[f] 'fieldset')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l242
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l242
-			}
-			if !matchChar('/') {
-				goto l242
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l242
-				}
-				switch p.Buffer[position] {
-				case 'F':
-					position++
-					if !matchString("IELDSET") {
-						goto l242
-					}
-					break
-				case 'f':
-					position++
-					if !matchString("ieldset") {
-						goto l242
-					}
-					break
-				default:
-					goto l242
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l242
-			}
+			goto l244
+		l245:
 			if !matchChar('>') {
 				goto l242
 			}
@@ -3521,38 +3513,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 50 HtmlBlockCloseFieldset <- ('<' Spnl '/' ((&[F] 'FIELDSET') | (&[f] 'fieldset')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l246
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l246
+			}
+			if !matchChar('/') {
+				goto l246
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l246
+				}
+				switch p.Buffer[position] {
+				case 'F':
+					position++
+					if !matchString("IELDSET") {
+						goto l246
+					}
+					break
+				case 'f':
+					position++
+					if !matchString("ieldset") {
+						goto l246
+					}
+					break
+				default:
+					goto l246
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l246
+			}
+			if !matchChar('>') {
+				goto l246
+			}
+			return true
+		l246:
+			position = position0
+			return false
+		},
 		/* 51 HtmlBlockFieldset <- (HtmlBlockOpenFieldset (HtmlBlockFieldset / (!HtmlBlockCloseFieldset .))* HtmlBlockCloseFieldset) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenFieldset]() {
-				goto l244
+				goto l248
 			}
-		l245:
+		l249:
 			{
-				position246 := position
+				position250 := position
 				if !p.rules[ruleHtmlBlockFieldset]() {
-					goto l248
+					goto l252
 				}
-				goto l247
-			l248:
+				goto l251
+			l252:
 				if !p.rules[ruleHtmlBlockCloseFieldset]() {
-					goto l249
+					goto l253
 				}
-				goto l246
-			l249:
+				goto l250
+			l253:
 				if !matchDot() {
-					goto l246
+					goto l250
 				}
-			l247:
-				goto l245
-			l246:
-				position = position246
+			l251:
+				goto l249
+			l250:
+				position = position250
 			}
 			if !p.rules[ruleHtmlBlockCloseFieldset]() {
-				goto l244
+				goto l248
 			}
 			return true
-		l244:
+		l248:
 			position = position0
 			return false
 		},
@@ -3560,85 +3596,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l250
+				goto l254
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l250
+				goto l254
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l250
+					goto l254
 				}
 				switch p.Buffer[position] {
 				case 'F':
 					position++
 					if !matchString("ORM") {
-						goto l250
+						goto l254
 					}
 					break
 				case 'f':
 					position++
 					if !matchString("orm") {
-						goto l250
+						goto l254
 					}
 					break
 				default:
-					goto l250
+					goto l254
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l250
+				goto l254
 			}
-		l252:
+		l256:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l253
+				goto l257
 			}
-			goto l252
-		l253:
-			if !matchChar('>') {
-				goto l250
-			}
-			return true
-		l250:
-			position = position0
-			return false
-		},
-		/* 53 HtmlBlockCloseForm <- ('<' Spnl '/' ((&[F] 'FORM') | (&[f] 'form')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l254
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l254
-			}
-			if !matchChar('/') {
-				goto l254
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l254
-				}
-				switch p.Buffer[position] {
-				case 'F':
-					position++
-					if !matchString("ORM") {
-						goto l254
-					}
-					break
-				case 'f':
-					position++
-					if !matchString("orm") {
-						goto l254
-					}
-					break
-				default:
-					goto l254
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l254
-			}
+			goto l256
+		l257:
 			if !matchChar('>') {
 				goto l254
 			}
@@ -3647,38 +3639,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 53 HtmlBlockCloseForm <- ('<' Spnl '/' ((&[F] 'FORM') | (&[f] 'form')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l258
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l258
+			}
+			if !matchChar('/') {
+				goto l258
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l258
+				}
+				switch p.Buffer[position] {
+				case 'F':
+					position++
+					if !matchString("ORM") {
+						goto l258
+					}
+					break
+				case 'f':
+					position++
+					if !matchString("orm") {
+						goto l258
+					}
+					break
+				default:
+					goto l258
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l258
+			}
+			if !matchChar('>') {
+				goto l258
+			}
+			return true
+		l258:
+			position = position0
+			return false
+		},
 		/* 54 HtmlBlockForm <- (HtmlBlockOpenForm (HtmlBlockForm / (!HtmlBlockCloseForm .))* HtmlBlockCloseForm) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenForm]() {
-				goto l256
+				goto l260
 			}
-		l257:
+		l261:
 			{
-				position258 := position
+				position262 := position
 				if !p.rules[ruleHtmlBlockForm]() {
-					goto l260
+					goto l264
 				}
-				goto l259
-			l260:
+				goto l263
+			l264:
 				if !p.rules[ruleHtmlBlockCloseForm]() {
-					goto l261
+					goto l265
 				}
-				goto l258
-			l261:
+				goto l262
+			l265:
 				if !matchDot() {
-					goto l258
+					goto l262
 				}
-			l259:
-				goto l257
-			l258:
-				position = position258
+			l263:
+				goto l261
+			l262:
+				position = position262
 			}
 			if !p.rules[ruleHtmlBlockCloseForm]() {
-				goto l256
+				goto l260
 			}
 			return true
-		l256:
+		l260:
 			position = position0
 			return false
 		},
@@ -3686,85 +3722,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l262
+				goto l266
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l262
+				goto l266
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l262
+					goto l266
 				}
 				switch p.Buffer[position] {
 				case 'H':
 					position++ // matchString(`H1`)
 					if !matchChar('1') {
-						goto l262
+						goto l266
 					}
 					break
 				case 'h':
 					position++ // matchString(`h1`)
 					if !matchChar('1') {
-						goto l262
+						goto l266
 					}
 					break
 				default:
-					goto l262
+					goto l266
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l262
+				goto l266
 			}
-		l264:
+		l268:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l265
+				goto l269
 			}
-			goto l264
-		l265:
-			if !matchChar('>') {
-				goto l262
-			}
-			return true
-		l262:
-			position = position0
-			return false
-		},
-		/* 56 HtmlBlockCloseH1 <- ('<' Spnl '/' ((&[H] 'H1') | (&[h] 'h1')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l266
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l266
-			}
-			if !matchChar('/') {
-				goto l266
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l266
-				}
-				switch p.Buffer[position] {
-				case 'H':
-					position++ // matchString(`H1`)
-					if !matchChar('1') {
-						goto l266
-					}
-					break
-				case 'h':
-					position++ // matchString(`h1`)
-					if !matchChar('1') {
-						goto l266
-					}
-					break
-				default:
-					goto l266
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l266
-			}
+			goto l268
+		l269:
 			if !matchChar('>') {
 				goto l266
 			}
@@ -3773,38 +3765,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 56 HtmlBlockCloseH1 <- ('<' Spnl '/' ((&[H] 'H1') | (&[h] 'h1')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l270
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l270
+			}
+			if !matchChar('/') {
+				goto l270
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l270
+				}
+				switch p.Buffer[position] {
+				case 'H':
+					position++ // matchString(`H1`)
+					if !matchChar('1') {
+						goto l270
+					}
+					break
+				case 'h':
+					position++ // matchString(`h1`)
+					if !matchChar('1') {
+						goto l270
+					}
+					break
+				default:
+					goto l270
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l270
+			}
+			if !matchChar('>') {
+				goto l270
+			}
+			return true
+		l270:
+			position = position0
+			return false
+		},
 		/* 57 HtmlBlockH1 <- (HtmlBlockOpenH1 (HtmlBlockH1 / (!HtmlBlockCloseH1 .))* HtmlBlockCloseH1) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenH1]() {
-				goto l268
+				goto l272
 			}
-		l269:
+		l273:
 			{
-				position270 := position
+				position274 := position
 				if !p.rules[ruleHtmlBlockH1]() {
-					goto l272
+					goto l276
 				}
-				goto l271
-			l272:
+				goto l275
+			l276:
 				if !p.rules[ruleHtmlBlockCloseH1]() {
-					goto l273
+					goto l277
 				}
-				goto l270
-			l273:
+				goto l274
+			l277:
 				if !matchDot() {
-					goto l270
+					goto l274
 				}
-			l271:
-				goto l269
-			l270:
-				position = position270
+			l275:
+				goto l273
+			l274:
+				position = position274
 			}
 			if !p.rules[ruleHtmlBlockCloseH1]() {
-				goto l268
+				goto l272
 			}
 			return true
-		l268:
+		l272:
 			position = position0
 			return false
 		},
@@ -3812,85 +3848,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l274
+				goto l278
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l274
+				goto l278
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l274
+					goto l278
 				}
 				switch p.Buffer[position] {
 				case 'H':
 					position++ // matchString(`H2`)
 					if !matchChar('2') {
-						goto l274
+						goto l278
 					}
 					break
 				case 'h':
 					position++ // matchString(`h2`)
 					if !matchChar('2') {
-						goto l274
+						goto l278
 					}
 					break
 				default:
-					goto l274
+					goto l278
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l274
+				goto l278
 			}
-		l276:
+		l280:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l277
+				goto l281
 			}
-			goto l276
-		l277:
-			if !matchChar('>') {
-				goto l274
-			}
-			return true
-		l274:
-			position = position0
-			return false
-		},
-		/* 59 HtmlBlockCloseH2 <- ('<' Spnl '/' ((&[H] 'H2') | (&[h] 'h2')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l278
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l278
-			}
-			if !matchChar('/') {
-				goto l278
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l278
-				}
-				switch p.Buffer[position] {
-				case 'H':
-					position++ // matchString(`H2`)
-					if !matchChar('2') {
-						goto l278
-					}
-					break
-				case 'h':
-					position++ // matchString(`h2`)
-					if !matchChar('2') {
-						goto l278
-					}
-					break
-				default:
-					goto l278
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l278
-			}
+			goto l280
+		l281:
 			if !matchChar('>') {
 				goto l278
 			}
@@ -3899,38 +3891,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 59 HtmlBlockCloseH2 <- ('<' Spnl '/' ((&[H] 'H2') | (&[h] 'h2')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l282
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l282
+			}
+			if !matchChar('/') {
+				goto l282
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l282
+				}
+				switch p.Buffer[position] {
+				case 'H':
+					position++ // matchString(`H2`)
+					if !matchChar('2') {
+						goto l282
+					}
+					break
+				case 'h':
+					position++ // matchString(`h2`)
+					if !matchChar('2') {
+						goto l282
+					}
+					break
+				default:
+					goto l282
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l282
+			}
+			if !matchChar('>') {
+				goto l282
+			}
+			return true
+		l282:
+			position = position0
+			return false
+		},
 		/* 60 HtmlBlockH2 <- (HtmlBlockOpenH2 (HtmlBlockH2 / (!HtmlBlockCloseH2 .))* HtmlBlockCloseH2) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenH2]() {
-				goto l280
+				goto l284
 			}
-		l281:
+		l285:
 			{
-				position282 := position
+				position286 := position
 				if !p.rules[ruleHtmlBlockH2]() {
-					goto l284
+					goto l288
 				}
-				goto l283
-			l284:
+				goto l287
+			l288:
 				if !p.rules[ruleHtmlBlockCloseH2]() {
-					goto l285
+					goto l289
 				}
-				goto l282
-			l285:
+				goto l286
+			l289:
 				if !matchDot() {
-					goto l282
+					goto l286
 				}
-			l283:
-				goto l281
-			l282:
-				position = position282
+			l287:
+				goto l285
+			l286:
+				position = position286
 			}
 			if !p.rules[ruleHtmlBlockCloseH2]() {
-				goto l280
+				goto l284
 			}
 			return true
-		l280:
+		l284:
 			position = position0
 			return false
 		},
@@ -3938,85 +3974,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l286
+				goto l290
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l286
+				goto l290
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l286
+					goto l290
 				}
 				switch p.Buffer[position] {
 				case 'H':
 					position++ // matchString(`H3`)
 					if !matchChar('3') {
-						goto l286
+						goto l290
 					}
 					break
 				case 'h':
 					position++ // matchString(`h3`)
 					if !matchChar('3') {
-						goto l286
+						goto l290
 					}
 					break
 				default:
-					goto l286
+					goto l290
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l286
+				goto l290
 			}
-		l288:
+		l292:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l289
+				goto l293
 			}
-			goto l288
-		l289:
-			if !matchChar('>') {
-				goto l286
-			}
-			return true
-		l286:
-			position = position0
-			return false
-		},
-		/* 62 HtmlBlockCloseH3 <- ('<' Spnl '/' ((&[H] 'H3') | (&[h] 'h3')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l290
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l290
-			}
-			if !matchChar('/') {
-				goto l290
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l290
-				}
-				switch p.Buffer[position] {
-				case 'H':
-					position++ // matchString(`H3`)
-					if !matchChar('3') {
-						goto l290
-					}
-					break
-				case 'h':
-					position++ // matchString(`h3`)
-					if !matchChar('3') {
-						goto l290
-					}
-					break
-				default:
-					goto l290
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l290
-			}
+			goto l292
+		l293:
 			if !matchChar('>') {
 				goto l290
 			}
@@ -4025,38 +4017,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 62 HtmlBlockCloseH3 <- ('<' Spnl '/' ((&[H] 'H3') | (&[h] 'h3')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l294
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l294
+			}
+			if !matchChar('/') {
+				goto l294
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l294
+				}
+				switch p.Buffer[position] {
+				case 'H':
+					position++ // matchString(`H3`)
+					if !matchChar('3') {
+						goto l294
+					}
+					break
+				case 'h':
+					position++ // matchString(`h3`)
+					if !matchChar('3') {
+						goto l294
+					}
+					break
+				default:
+					goto l294
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l294
+			}
+			if !matchChar('>') {
+				goto l294
+			}
+			return true
+		l294:
+			position = position0
+			return false
+		},
 		/* 63 HtmlBlockH3 <- (HtmlBlockOpenH3 (HtmlBlockH3 / (!HtmlBlockCloseH3 .))* HtmlBlockCloseH3) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenH3]() {
-				goto l292
+				goto l296
 			}
-		l293:
+		l297:
 			{
-				position294 := position
+				position298 := position
 				if !p.rules[ruleHtmlBlockH3]() {
-					goto l296
+					goto l300
 				}
-				goto l295
-			l296:
+				goto l299
+			l300:
 				if !p.rules[ruleHtmlBlockCloseH3]() {
-					goto l297
+					goto l301
 				}
-				goto l294
-			l297:
+				goto l298
+			l301:
 				if !matchDot() {
-					goto l294
+					goto l298
 				}
-			l295:
-				goto l293
-			l294:
-				position = position294
+			l299:
+				goto l297
+			l298:
+				position = position298
 			}
 			if !p.rules[ruleHtmlBlockCloseH3]() {
-				goto l292
+				goto l296
 			}
 			return true
-		l292:
+		l296:
 			position = position0
 			return false
 		},
@@ -4064,85 +4100,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l298
+				goto l302
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l298
+				goto l302
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l298
+					goto l302
 				}
 				switch p.Buffer[position] {
 				case 'H':
 					position++ // matchString(`H4`)
 					if !matchChar('4') {
-						goto l298
+						goto l302
 					}
 					break
 				case 'h':
 					position++ // matchString(`h4`)
 					if !matchChar('4') {
-						goto l298
+						goto l302
 					}
 					break
 				default:
-					goto l298
+					goto l302
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l298
+				goto l302
 			}
-		l300:
+		l304:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l301
+				goto l305
 			}
-			goto l300
-		l301:
-			if !matchChar('>') {
-				goto l298
-			}
-			return true
-		l298:
-			position = position0
-			return false
-		},
-		/* 65 HtmlBlockCloseH4 <- ('<' Spnl '/' ((&[H] 'H4') | (&[h] 'h4')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l302
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l302
-			}
-			if !matchChar('/') {
-				goto l302
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l302
-				}
-				switch p.Buffer[position] {
-				case 'H':
-					position++ // matchString(`H4`)
-					if !matchChar('4') {
-						goto l302
-					}
-					break
-				case 'h':
-					position++ // matchString(`h4`)
-					if !matchChar('4') {
-						goto l302
-					}
-					break
-				default:
-					goto l302
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l302
-			}
+			goto l304
+		l305:
 			if !matchChar('>') {
 				goto l302
 			}
@@ -4151,38 +4143,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 65 HtmlBlockCloseH4 <- ('<' Spnl '/' ((&[H] 'H4') | (&[h] 'h4')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l306
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l306
+			}
+			if !matchChar('/') {
+				goto l306
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l306
+				}
+				switch p.Buffer[position] {
+				case 'H':
+					position++ // matchString(`H4`)
+					if !matchChar('4') {
+						goto l306
+					}
+					break
+				case 'h':
+					position++ // matchString(`h4`)
+					if !matchChar('4') {
+						goto l306
+					}
+					break
+				default:
+					goto l306
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l306
+			}
+			if !matchChar('>') {
+				goto l306
+			}
+			return true
+		l306:
+			position = position0
+			return false
+		},
 		/* 66 HtmlBlockH4 <- (HtmlBlockOpenH4 (HtmlBlockH4 / (!HtmlBlockCloseH4 .))* HtmlBlockCloseH4) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenH4]() {
-				goto l304
+				goto l308
 			}
-		l305:
+		l309:
 			{
-				position306 := position
+				position310 := position
 				if !p.rules[ruleHtmlBlockH4]() {
-					goto l308
+					goto l312
 				}
-				goto l307
-			l308:
+				goto l311
+			l312:
 				if !p.rules[ruleHtmlBlockCloseH4]() {
-					goto l309
+					goto l313
 				}
-				goto l306
-			l309:
+				goto l310
+			l313:
 				if !matchDot() {
-					goto l306
+					goto l310
 				}
-			l307:
-				goto l305
-			l306:
-				position = position306
+			l311:
+				goto l309
+			l310:
+				position = position310
 			}
 			if !p.rules[ruleHtmlBlockCloseH4]() {
-				goto l304
+				goto l308
 			}
 			return true
-		l304:
+		l308:
 			position = position0
 			return false
 		},
@@ -4190,85 +4226,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l310
+				goto l314
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l310
+				goto l314
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l310
+					goto l314
 				}
 				switch p.Buffer[position] {
 				case 'H':
 					position++ // matchString(`H5`)
 					if !matchChar('5') {
-						goto l310
+						goto l314
 					}
 					break
 				case 'h':
 					position++ // matchString(`h5`)
 					if !matchChar('5') {
-						goto l310
+						goto l314
 					}
 					break
 				default:
-					goto l310
+					goto l314
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l310
+				goto l314
 			}
-		l312:
+		l316:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l313
+				goto l317
 			}
-			goto l312
-		l313:
-			if !matchChar('>') {
-				goto l310
-			}
-			return true
-		l310:
-			position = position0
-			return false
-		},
-		/* 68 HtmlBlockCloseH5 <- ('<' Spnl '/' ((&[H] 'H5') | (&[h] 'h5')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l314
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l314
-			}
-			if !matchChar('/') {
-				goto l314
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l314
-				}
-				switch p.Buffer[position] {
-				case 'H':
-					position++ // matchString(`H5`)
-					if !matchChar('5') {
-						goto l314
-					}
-					break
-				case 'h':
-					position++ // matchString(`h5`)
-					if !matchChar('5') {
-						goto l314
-					}
-					break
-				default:
-					goto l314
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l314
-			}
+			goto l316
+		l317:
 			if !matchChar('>') {
 				goto l314
 			}
@@ -4277,38 +4269,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 68 HtmlBlockCloseH5 <- ('<' Spnl '/' ((&[H] 'H5') | (&[h] 'h5')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l318
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l318
+			}
+			if !matchChar('/') {
+				goto l318
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l318
+				}
+				switch p.Buffer[position] {
+				case 'H':
+					position++ // matchString(`H5`)
+					if !matchChar('5') {
+						goto l318
+					}
+					break
+				case 'h':
+					position++ // matchString(`h5`)
+					if !matchChar('5') {
+						goto l318
+					}
+					break
+				default:
+					goto l318
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l318
+			}
+			if !matchChar('>') {
+				goto l318
+			}
+			return true
+		l318:
+			position = position0
+			return false
+		},
 		/* 69 HtmlBlockH5 <- (HtmlBlockOpenH5 (HtmlBlockH5 / (!HtmlBlockCloseH5 .))* HtmlBlockCloseH5) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenH5]() {
-				goto l316
+				goto l320
 			}
-		l317:
+		l321:
 			{
-				position318 := position
+				position322 := position
 				if !p.rules[ruleHtmlBlockH5]() {
-					goto l320
+					goto l324
 				}
-				goto l319
-			l320:
+				goto l323
+			l324:
 				if !p.rules[ruleHtmlBlockCloseH5]() {
-					goto l321
+					goto l325
 				}
-				goto l318
-			l321:
+				goto l322
+			l325:
 				if !matchDot() {
-					goto l318
+					goto l322
 				}
-			l319:
-				goto l317
-			l318:
-				position = position318
+			l323:
+				goto l321
+			l322:
+				position = position322
 			}
 			if !p.rules[ruleHtmlBlockCloseH5]() {
-				goto l316
+				goto l320
 			}
 			return true
-		l316:
+		l320:
 			position = position0
 			return false
 		},
@@ -4316,85 +4352,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l322
+				goto l326
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l322
+				goto l326
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l322
+					goto l326
 				}
 				switch p.Buffer[position] {
 				case 'H':
 					position++ // matchString(`H6`)
 					if !matchChar('6') {
-						goto l322
+						goto l326
 					}
 					break
 				case 'h':
 					position++ // matchString(`h6`)
 					if !matchChar('6') {
-						goto l322
+						goto l326
 					}
 					break
 				default:
-					goto l322
+					goto l326
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l322
+				goto l326
 			}
-		l324:
+		l328:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l325
+				goto l329
 			}
-			goto l324
-		l325:
-			if !matchChar('>') {
-				goto l322
-			}
-			return true
-		l322:
-			position = position0
-			return false
-		},
-		/* 71 HtmlBlockCloseH6 <- ('<' Spnl '/' ((&[H] 'H6') | (&[h] 'h6')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l326
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l326
-			}
-			if !matchChar('/') {
-				goto l326
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l326
-				}
-				switch p.Buffer[position] {
-				case 'H':
-					position++ // matchString(`H6`)
-					if !matchChar('6') {
-						goto l326
-					}
-					break
-				case 'h':
-					position++ // matchString(`h6`)
-					if !matchChar('6') {
-						goto l326
-					}
-					break
-				default:
-					goto l326
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l326
-			}
+			goto l328
+		l329:
 			if !matchChar('>') {
 				goto l326
 			}
@@ -4403,38 +4395,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 71 HtmlBlockCloseH6 <- ('<' Spnl '/' ((&[H] 'H6') | (&[h] 'h6')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l330
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l330
+			}
+			if !matchChar('/') {
+				goto l330
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l330
+				}
+				switch p.Buffer[position] {
+				case 'H':
+					position++ // matchString(`H6`)
+					if !matchChar('6') {
+						goto l330
+					}
+					break
+				case 'h':
+					position++ // matchString(`h6`)
+					if !matchChar('6') {
+						goto l330
+					}
+					break
+				default:
+					goto l330
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l330
+			}
+			if !matchChar('>') {
+				goto l330
+			}
+			return true
+		l330:
+			position = position0
+			return false
+		},
 		/* 72 HtmlBlockH6 <- (HtmlBlockOpenH6 (HtmlBlockH6 / (!HtmlBlockCloseH6 .))* HtmlBlockCloseH6) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenH6]() {
-				goto l328
+				goto l332
 			}
-		l329:
+		l333:
 			{
-				position330 := position
+				position334 := position
 				if !p.rules[ruleHtmlBlockH6]() {
-					goto l332
+					goto l336
 				}
-				goto l331
-			l332:
+				goto l335
+			l336:
 				if !p.rules[ruleHtmlBlockCloseH6]() {
-					goto l333
+					goto l337
 				}
-				goto l330
-			l333:
+				goto l334
+			l337:
 				if !matchDot() {
-					goto l330
+					goto l334
 				}
-			l331:
-				goto l329
-			l330:
-				position = position330
+			l335:
+				goto l333
+			l334:
+				position = position334
 			}
 			if !p.rules[ruleHtmlBlockCloseH6]() {
-				goto l328
+				goto l332
 			}
 			return true
-		l328:
+		l332:
 			position = position0
 			return false
 		},
@@ -4442,85 +4478,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l334
+				goto l338
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l334
+				goto l338
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l334
+					goto l338
 				}
 				switch p.Buffer[position] {
 				case 'M':
 					position++
 					if !matchString("ENU") {
-						goto l334
+						goto l338
 					}
 					break
 				case 'm':
 					position++
 					if !matchString("enu") {
-						goto l334
+						goto l338
 					}
 					break
 				default:
-					goto l334
+					goto l338
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l334
+				goto l338
 			}
-		l336:
+		l340:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l337
+				goto l341
 			}
-			goto l336
-		l337:
-			if !matchChar('>') {
-				goto l334
-			}
-			return true
-		l334:
-			position = position0
-			return false
-		},
-		/* 74 HtmlBlockCloseMenu <- ('<' Spnl '/' ((&[M] 'MENU') | (&[m] 'menu')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l338
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l338
-			}
-			if !matchChar('/') {
-				goto l338
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l338
-				}
-				switch p.Buffer[position] {
-				case 'M':
-					position++
-					if !matchString("ENU") {
-						goto l338
-					}
-					break
-				case 'm':
-					position++
-					if !matchString("enu") {
-						goto l338
-					}
-					break
-				default:
-					goto l338
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l338
-			}
+			goto l340
+		l341:
 			if !matchChar('>') {
 				goto l338
 			}
@@ -4529,38 +4521,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 74 HtmlBlockCloseMenu <- ('<' Spnl '/' ((&[M] 'MENU') | (&[m] 'menu')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l342
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l342
+			}
+			if !matchChar('/') {
+				goto l342
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l342
+				}
+				switch p.Buffer[position] {
+				case 'M':
+					position++
+					if !matchString("ENU") {
+						goto l342
+					}
+					break
+				case 'm':
+					position++
+					if !matchString("enu") {
+						goto l342
+					}
+					break
+				default:
+					goto l342
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l342
+			}
+			if !matchChar('>') {
+				goto l342
+			}
+			return true
+		l342:
+			position = position0
+			return false
+		},
 		/* 75 HtmlBlockMenu <- (HtmlBlockOpenMenu (HtmlBlockMenu / (!HtmlBlockCloseMenu .))* HtmlBlockCloseMenu) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenMenu]() {
-				goto l340
+				goto l344
 			}
-		l341:
+		l345:
 			{
-				position342 := position
+				position346 := position
 				if !p.rules[ruleHtmlBlockMenu]() {
-					goto l344
+					goto l348
 				}
-				goto l343
-			l344:
+				goto l347
+			l348:
 				if !p.rules[ruleHtmlBlockCloseMenu]() {
-					goto l345
+					goto l349
 				}
-				goto l342
-			l345:
+				goto l346
+			l349:
 				if !matchDot() {
-					goto l342
+					goto l346
 				}
-			l343:
-				goto l341
-			l342:
-				position = position342
+			l347:
+				goto l345
+			l346:
+				position = position346
 			}
 			if !p.rules[ruleHtmlBlockCloseMenu]() {
-				goto l340
+				goto l344
 			}
 			return true
-		l340:
+		l344:
 			position = position0
 			return false
 		},
@@ -4568,85 +4604,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l346
+				goto l350
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l346
+				goto l350
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l346
+					goto l350
 				}
 				switch p.Buffer[position] {
 				case 'N':
 					position++
 					if !matchString("OFRAMES") {
-						goto l346
+						goto l350
 					}
 					break
 				case 'n':
 					position++
 					if !matchString("oframes") {
-						goto l346
+						goto l350
 					}
 					break
 				default:
-					goto l346
+					goto l350
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l346
+				goto l350
 			}
-		l348:
+		l352:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l349
+				goto l353
 			}
-			goto l348
-		l349:
-			if !matchChar('>') {
-				goto l346
-			}
-			return true
-		l346:
-			position = position0
-			return false
-		},
-		/* 77 HtmlBlockCloseNoframes <- ('<' Spnl '/' ((&[N] 'NOFRAMES') | (&[n] 'noframes')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l350
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l350
-			}
-			if !matchChar('/') {
-				goto l350
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l350
-				}
-				switch p.Buffer[position] {
-				case 'N':
-					position++
-					if !matchString("OFRAMES") {
-						goto l350
-					}
-					break
-				case 'n':
-					position++
-					if !matchString("oframes") {
-						goto l350
-					}
-					break
-				default:
-					goto l350
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l350
-			}
+			goto l352
+		l353:
 			if !matchChar('>') {
 				goto l350
 			}
@@ -4655,38 +4647,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 77 HtmlBlockCloseNoframes <- ('<' Spnl '/' ((&[N] 'NOFRAMES') | (&[n] 'noframes')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l354
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l354
+			}
+			if !matchChar('/') {
+				goto l354
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l354
+				}
+				switch p.Buffer[position] {
+				case 'N':
+					position++
+					if !matchString("OFRAMES") {
+						goto l354
+					}
+					break
+				case 'n':
+					position++
+					if !matchString("oframes") {
+						goto l354
+					}
+					break
+				default:
+					goto l354
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l354
+			}
+			if !matchChar('>') {
+				goto l354
+			}
+			return true
+		l354:
+			position = position0
+			return false
+		},
 		/* 78 HtmlBlockNoframes <- (HtmlBlockOpenNoframes (HtmlBlockNoframes / (!HtmlBlockCloseNoframes .))* HtmlBlockCloseNoframes) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenNoframes]() {
-				goto l352
+				goto l356
 			}
-		l353:
+		l357:
 			{
-				position354 := position
+				position358 := position
 				if !p.rules[ruleHtmlBlockNoframes]() {
-					goto l356
+					goto l360
 				}
-				goto l355
-			l356:
+				goto l359
+			l360:
 				if !p.rules[ruleHtmlBlockCloseNoframes]() {
-					goto l357
+					goto l361
 				}
-				goto l354
-			l357:
+				goto l358
+			l361:
 				if !matchDot() {
-					goto l354
+					goto l358
 				}
-			l355:
-				goto l353
-			l354:
-				position = position354
+			l359:
+				goto l357
+			l358:
+				position = position358
 			}
 			if !p.rules[ruleHtmlBlockCloseNoframes]() {
-				goto l352
+				goto l356
 			}
 			return true
-		l352:
+		l356:
 			position = position0
 			return false
 		},
@@ -4694,85 +4730,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l358
+				goto l362
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l358
+				goto l362
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l358
+					goto l362
 				}
 				switch p.Buffer[position] {
 				case 'N':
 					position++
 					if !matchString("OSCRIPT") {
-						goto l358
+						goto l362
 					}
 					break
 				case 'n':
 					position++
 					if !matchString("oscript") {
-						goto l358
+						goto l362
 					}
 					break
 				default:
-					goto l358
+					goto l362
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l358
+				goto l362
 			}
-		l360:
+		l364:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l361
+				goto l365
 			}
-			goto l360
-		l361:
-			if !matchChar('>') {
-				goto l358
-			}
-			return true
-		l358:
-			position = position0
-			return false
-		},
-		/* 80 HtmlBlockCloseNoscript <- ('<' Spnl '/' ((&[N] 'NOSCRIPT') | (&[n] 'noscript')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l362
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l362
-			}
-			if !matchChar('/') {
-				goto l362
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l362
-				}
-				switch p.Buffer[position] {
-				case 'N':
-					position++
-					if !matchString("OSCRIPT") {
-						goto l362
-					}
-					break
-				case 'n':
-					position++
-					if !matchString("oscript") {
-						goto l362
-					}
-					break
-				default:
-					goto l362
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l362
-			}
+			goto l364
+		l365:
 			if !matchChar('>') {
 				goto l362
 			}
@@ -4781,38 +4773,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 80 HtmlBlockCloseNoscript <- ('<' Spnl '/' ((&[N] 'NOSCRIPT') | (&[n] 'noscript')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l366
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l366
+			}
+			if !matchChar('/') {
+				goto l366
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l366
+				}
+				switch p.Buffer[position] {
+				case 'N':
+					position++
+					if !matchString("OSCRIPT") {
+						goto l366
+					}
+					break
+				case 'n':
+					position++
+					if !matchString("oscript") {
+						goto l366
+					}
+					break
+				default:
+					goto l366
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l366
+			}
+			if !matchChar('>') {
+				goto l366
+			}
+			return true
+		l366:
+			position = position0
+			return false
+		},
 		/* 81 HtmlBlockNoscript <- (HtmlBlockOpenNoscript (HtmlBlockNoscript / (!HtmlBlockCloseNoscript .))* HtmlBlockCloseNoscript) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenNoscript]() {
-				goto l364
+				goto l368
 			}
-		l365:
+		l369:
 			{
-				position366 := position
+				position370 := position
 				if !p.rules[ruleHtmlBlockNoscript]() {
-					goto l368
+					goto l372
 				}
-				goto l367
-			l368:
+				goto l371
+			l372:
 				if !p.rules[ruleHtmlBlockCloseNoscript]() {
-					goto l369
+					goto l373
 				}
-				goto l366
-			l369:
+				goto l370
+			l373:
 				if !matchDot() {
-					goto l366
+					goto l370
 				}
-			l367:
-				goto l365
-			l366:
-				position = position366
+			l371:
+				goto l369
+			l370:
+				position = position370
 			}
 			if !p.rules[ruleHtmlBlockCloseNoscript]() {
-				goto l364
+				goto l368
 			}
 			return true
-		l364:
+		l368:
 			position = position0
 			return false
 		},
@@ -4820,85 +4856,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l370
+				goto l374
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l370
+				goto l374
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l370
+					goto l374
 				}
 				switch p.Buffer[position] {
 				case 'O':
 					position++ // matchString(`OL`)
 					if !matchChar('L') {
-						goto l370
+						goto l374
 					}
 					break
 				case 'o':
 					position++ // matchString(`ol`)
 					if !matchChar('l') {
-						goto l370
+						goto l374
 					}
 					break
 				default:
-					goto l370
+					goto l374
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l370
+				goto l374
 			}
-		l372:
+		l376:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l373
+				goto l377
 			}
-			goto l372
-		l373:
-			if !matchChar('>') {
-				goto l370
-			}
-			return true
-		l370:
-			position = position0
-			return false
-		},
-		/* 83 HtmlBlockCloseOl <- ('<' Spnl '/' ((&[O] 'OL') | (&[o] 'ol')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l374
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l374
-			}
-			if !matchChar('/') {
-				goto l374
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l374
-				}
-				switch p.Buffer[position] {
-				case 'O':
-					position++ // matchString(`OL`)
-					if !matchChar('L') {
-						goto l374
-					}
-					break
-				case 'o':
-					position++ // matchString(`ol`)
-					if !matchChar('l') {
-						goto l374
-					}
-					break
-				default:
-					goto l374
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l374
-			}
+			goto l376
+		l377:
 			if !matchChar('>') {
 				goto l374
 			}
@@ -4907,38 +4899,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 83 HtmlBlockCloseOl <- ('<' Spnl '/' ((&[O] 'OL') | (&[o] 'ol')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l378
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l378
+			}
+			if !matchChar('/') {
+				goto l378
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l378
+				}
+				switch p.Buffer[position] {
+				case 'O':
+					position++ // matchString(`OL`)
+					if !matchChar('L') {
+						goto l378
+					}
+					break
+				case 'o':
+					position++ // matchString(`ol`)
+					if !matchChar('l') {
+						goto l378
+					}
+					break
+				default:
+					goto l378
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l378
+			}
+			if !matchChar('>') {
+				goto l378
+			}
+			return true
+		l378:
+			position = position0
+			return false
+		},
 		/* 84 HtmlBlockOl <- (HtmlBlockOpenOl (HtmlBlockOl / (!HtmlBlockCloseOl .))* HtmlBlockCloseOl) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenOl]() {
-				goto l376
+				goto l380
 			}
-		l377:
+		l381:
 			{
-				position378 := position
+				position382 := position
 				if !p.rules[ruleHtmlBlockOl]() {
-					goto l380
+					goto l384
 				}
-				goto l379
-			l380:
+				goto l383
+			l384:
 				if !p.rules[ruleHtmlBlockCloseOl]() {
-					goto l381
+					goto l385
 				}
-				goto l378
-			l381:
+				goto l382
+			l385:
 				if !matchDot() {
-					goto l378
+					goto l382
 				}
-			l379:
-				goto l377
-			l378:
-				position = position378
+			l383:
+				goto l381
+			l382:
+				position = position382
 			}
 			if !p.rules[ruleHtmlBlockCloseOl]() {
-				goto l376
+				goto l380
 			}
 			return true
-		l376:
+		l380:
 			position = position0
 			return false
 		},
@@ -4946,14 +4982,14 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l382
+				goto l386
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l382
+				goto l386
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l382
+					goto l386
 				}
 				switch p.Buffer[position] {
 				case 'P':
@@ -4963,56 +4999,18 @@ func (p *yyParser) Init() {
 					position++ // matchChar
 					break
 				default:
-					goto l382
+					goto l386
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l382
+				goto l386
 			}
-		l384:
+		l388:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l385
+				goto l389
 			}
-			goto l384
-		l385:
-			if !matchChar('>') {
-				goto l382
-			}
-			return true
-		l382:
-			position = position0
-			return false
-		},
-		/* 86 HtmlBlockCloseP <- ('<' Spnl '/' ((&[P] 'P') | (&[p] 'p')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l386
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l386
-			}
-			if !matchChar('/') {
-				goto l386
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l386
-				}
-				switch p.Buffer[position] {
-				case 'P':
-					position++ // matchChar
-					break
-				case 'p':
-					position++ // matchChar
-					break
-				default:
-					goto l386
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l386
-			}
+			goto l388
+		l389:
 			if !matchChar('>') {
 				goto l386
 			}
@@ -5021,38 +5019,76 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 86 HtmlBlockCloseP <- ('<' Spnl '/' ((&[P] 'P') | (&[p] 'p')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l390
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l390
+			}
+			if !matchChar('/') {
+				goto l390
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l390
+				}
+				switch p.Buffer[position] {
+				case 'P':
+					position++ // matchChar
+					break
+				case 'p':
+					position++ // matchChar
+					break
+				default:
+					goto l390
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l390
+			}
+			if !matchChar('>') {
+				goto l390
+			}
+			return true
+		l390:
+			position = position0
+			return false
+		},
 		/* 87 HtmlBlockP <- (HtmlBlockOpenP (HtmlBlockP / (!HtmlBlockCloseP .))* HtmlBlockCloseP) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenP]() {
-				goto l388
+				goto l392
 			}
-		l389:
+		l393:
 			{
-				position390 := position
+				position394 := position
 				if !p.rules[ruleHtmlBlockP]() {
-					goto l392
+					goto l396
 				}
-				goto l391
-			l392:
+				goto l395
+			l396:
 				if !p.rules[ruleHtmlBlockCloseP]() {
-					goto l393
+					goto l397
 				}
-				goto l390
-			l393:
+				goto l394
+			l397:
 				if !matchDot() {
-					goto l390
+					goto l394
 				}
-			l391:
-				goto l389
-			l390:
-				position = position390
+			l395:
+				goto l393
+			l394:
+				position = position394
 			}
 			if !p.rules[ruleHtmlBlockCloseP]() {
-				goto l388
+				goto l392
 			}
 			return true
-		l388:
+		l392:
 			position = position0
 			return false
 		},
@@ -5060,85 +5096,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l394
+				goto l398
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l394
+				goto l398
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l394
+					goto l398
 				}
 				switch p.Buffer[position] {
 				case 'P':
 					position++
 					if !matchString("RE") {
-						goto l394
+						goto l398
 					}
 					break
 				case 'p':
 					position++
 					if !matchString("re") {
-						goto l394
+						goto l398
 					}
 					break
 				default:
-					goto l394
+					goto l398
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l394
+				goto l398
 			}
-		l396:
+		l400:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l397
+				goto l401
 			}
-			goto l396
-		l397:
-			if !matchChar('>') {
-				goto l394
-			}
-			return true
-		l394:
-			position = position0
-			return false
-		},
-		/* 89 HtmlBlockClosePre <- ('<' Spnl '/' ((&[P] 'PRE') | (&[p] 'pre')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l398
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l398
-			}
-			if !matchChar('/') {
-				goto l398
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l398
-				}
-				switch p.Buffer[position] {
-				case 'P':
-					position++
-					if !matchString("RE") {
-						goto l398
-					}
-					break
-				case 'p':
-					position++
-					if !matchString("re") {
-						goto l398
-					}
-					break
-				default:
-					goto l398
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l398
-			}
+			goto l400
+		l401:
 			if !matchChar('>') {
 				goto l398
 			}
@@ -5147,38 +5139,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 89 HtmlBlockClosePre <- ('<' Spnl '/' ((&[P] 'PRE') | (&[p] 'pre')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l402
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l402
+			}
+			if !matchChar('/') {
+				goto l402
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l402
+				}
+				switch p.Buffer[position] {
+				case 'P':
+					position++
+					if !matchString("RE") {
+						goto l402
+					}
+					break
+				case 'p':
+					position++
+					if !matchString("re") {
+						goto l402
+					}
+					break
+				default:
+					goto l402
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l402
+			}
+			if !matchChar('>') {
+				goto l402
+			}
+			return true
+		l402:
+			position = position0
+			return false
+		},
 		/* 90 HtmlBlockPre <- (HtmlBlockOpenPre (HtmlBlockPre / (!HtmlBlockClosePre .))* HtmlBlockClosePre) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenPre]() {
-				goto l400
+				goto l404
 			}
-		l401:
+		l405:
 			{
-				position402 := position
+				position406 := position
 				if !p.rules[ruleHtmlBlockPre]() {
-					goto l404
+					goto l408
 				}
-				goto l403
-			l404:
+				goto l407
+			l408:
 				if !p.rules[ruleHtmlBlockClosePre]() {
-					goto l405
+					goto l409
 				}
-				goto l402
-			l405:
+				goto l406
+			l409:
 				if !matchDot() {
-					goto l402
+					goto l406
 				}
-			l403:
-				goto l401
-			l402:
-				position = position402
+			l407:
+				goto l405
+			l406:
+				position = position406
 			}
 			if !p.rules[ruleHtmlBlockClosePre]() {
-				goto l400
+				goto l404
 			}
 			return true
-		l400:
+		l404:
 			position = position0
 			return false
 		},
@@ -5186,85 +5222,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l406
+				goto l410
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l406
+				goto l410
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l406
+					goto l410
 				}
 				switch p.Buffer[position] {
 				case 'T':
 					position++
 					if !matchString("ABLE") {
-						goto l406
+						goto l410
 					}
 					break
 				case 't':
 					position++
 					if !matchString("able") {
-						goto l406
+						goto l410
 					}
 					break
 				default:
-					goto l406
+					goto l410
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l406
+				goto l410
 			}
-		l408:
+		l412:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l409
+				goto l413
 			}
-			goto l408
-		l409:
-			if !matchChar('>') {
-				goto l406
-			}
-			return true
-		l406:
-			position = position0
-			return false
-		},
-		/* 92 HtmlBlockCloseTable <- ('<' Spnl '/' ((&[T] 'TABLE') | (&[t] 'table')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l410
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l410
-			}
-			if !matchChar('/') {
-				goto l410
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l410
-				}
-				switch p.Buffer[position] {
-				case 'T':
-					position++
-					if !matchString("ABLE") {
-						goto l410
-					}
-					break
-				case 't':
-					position++
-					if !matchString("able") {
-						goto l410
-					}
-					break
-				default:
-					goto l410
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l410
-			}
+			goto l412
+		l413:
 			if !matchChar('>') {
 				goto l410
 			}
@@ -5273,38 +5265,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 92 HtmlBlockCloseTable <- ('<' Spnl '/' ((&[T] 'TABLE') | (&[t] 'table')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l414
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l414
+			}
+			if !matchChar('/') {
+				goto l414
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l414
+				}
+				switch p.Buffer[position] {
+				case 'T':
+					position++
+					if !matchString("ABLE") {
+						goto l414
+					}
+					break
+				case 't':
+					position++
+					if !matchString("able") {
+						goto l414
+					}
+					break
+				default:
+					goto l414
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l414
+			}
+			if !matchChar('>') {
+				goto l414
+			}
+			return true
+		l414:
+			position = position0
+			return false
+		},
 		/* 93 HtmlBlockTable <- (HtmlBlockOpenTable (HtmlBlockTable / (!HtmlBlockCloseTable .))* HtmlBlockCloseTable) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenTable]() {
-				goto l412
+				goto l416
 			}
-		l413:
+		l417:
 			{
-				position414 := position
+				position418 := position
 				if !p.rules[ruleHtmlBlockTable]() {
-					goto l416
+					goto l420
 				}
-				goto l415
-			l416:
+				goto l419
+			l420:
 				if !p.rules[ruleHtmlBlockCloseTable]() {
-					goto l417
+					goto l421
 				}
-				goto l414
-			l417:
+				goto l418
+			l421:
 				if !matchDot() {
-					goto l414
+					goto l418
 				}
-			l415:
-				goto l413
-			l414:
-				position = position414
+			l419:
+				goto l417
+			l418:
+				position = position418
 			}
 			if !p.rules[ruleHtmlBlockCloseTable]() {
-				goto l412
+				goto l416
 			}
 			return true
-		l412:
+		l416:
 			position = position0
 			return false
 		},
@@ -5312,85 +5348,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l418
+				goto l422
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l418
+				goto l422
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l418
+					goto l422
 				}
 				switch p.Buffer[position] {
 				case 'U':
 					position++ // matchString(`UL`)
 					if !matchChar('L') {
-						goto l418
+						goto l422
 					}
 					break
 				case 'u':
 					position++ // matchString(`ul`)
 					if !matchChar('l') {
-						goto l418
+						goto l422
 					}
 					break
 				default:
-					goto l418
+					goto l422
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l418
+				goto l422
 			}
-		l420:
+		l424:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l421
+				goto l425
 			}
-			goto l420
-		l421:
-			if !matchChar('>') {
-				goto l418
-			}
-			return true
-		l418:
-			position = position0
-			return false
-		},
-		/* 95 HtmlBlockCloseUl <- ('<' Spnl '/' ((&[U] 'UL') | (&[u] 'ul')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l422
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l422
-			}
-			if !matchChar('/') {
-				goto l422
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l422
-				}
-				switch p.Buffer[position] {
-				case 'U':
-					position++ // matchString(`UL`)
-					if !matchChar('L') {
-						goto l422
-					}
-					break
-				case 'u':
-					position++ // matchString(`ul`)
-					if !matchChar('l') {
-						goto l422
-					}
-					break
-				default:
-					goto l422
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l422
-			}
+			goto l424
+		l425:
 			if !matchChar('>') {
 				goto l422
 			}
@@ -5399,38 +5391,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 95 HtmlBlockCloseUl <- ('<' Spnl '/' ((&[U] 'UL') | (&[u] 'ul')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l426
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l426
+			}
+			if !matchChar('/') {
+				goto l426
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l426
+				}
+				switch p.Buffer[position] {
+				case 'U':
+					position++ // matchString(`UL`)
+					if !matchChar('L') {
+						goto l426
+					}
+					break
+				case 'u':
+					position++ // matchString(`ul`)
+					if !matchChar('l') {
+						goto l426
+					}
+					break
+				default:
+					goto l426
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l426
+			}
+			if !matchChar('>') {
+				goto l426
+			}
+			return true
+		l426:
+			position = position0
+			return false
+		},
 		/* 96 HtmlBlockUl <- (HtmlBlockOpenUl (HtmlBlockUl / (!HtmlBlockCloseUl .))* HtmlBlockCloseUl) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenUl]() {
-				goto l424
+				goto l428
 			}
-		l425:
+		l429:
 			{
-				position426 := position
+				position430 := position
 				if !p.rules[ruleHtmlBlockUl]() {
-					goto l428
+					goto l432
 				}
-				goto l427
-			l428:
+				goto l431
+			l432:
 				if !p.rules[ruleHtmlBlockCloseUl]() {
-					goto l429
+					goto l433
 				}
-				goto l426
-			l429:
+				goto l430
+			l433:
 				if !matchDot() {
-					goto l426
+					goto l430
 				}
-			l427:
-				goto l425
-			l426:
-				position = position426
+			l431:
+				goto l429
+			l430:
+				position = position430
 			}
 			if !p.rules[ruleHtmlBlockCloseUl]() {
-				goto l424
+				goto l428
 			}
 			return true
-		l424:
+		l428:
 			position = position0
 			return false
 		},
@@ -5438,85 +5474,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l430
+				goto l434
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l430
+				goto l434
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l430
+					goto l434
 				}
 				switch p.Buffer[position] {
 				case 'D':
 					position++ // matchString(`DD`)
 					if !matchChar('D') {
-						goto l430
+						goto l434
 					}
 					break
 				case 'd':
 					position++ // matchString(`dd`)
 					if !matchChar('d') {
-						goto l430
+						goto l434
 					}
 					break
 				default:
-					goto l430
+					goto l434
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l430
+				goto l434
 			}
-		l432:
+		l436:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l433
+				goto l437
 			}
-			goto l432
-		l433:
-			if !matchChar('>') {
-				goto l430
-			}
-			return true
-		l430:
-			position = position0
-			return false
-		},
-		/* 98 HtmlBlockCloseDd <- ('<' Spnl '/' ((&[D] 'DD') | (&[d] 'dd')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l434
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l434
-			}
-			if !matchChar('/') {
-				goto l434
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l434
-				}
-				switch p.Buffer[position] {
-				case 'D':
-					position++ // matchString(`DD`)
-					if !matchChar('D') {
-						goto l434
-					}
-					break
-				case 'd':
-					position++ // matchString(`dd`)
-					if !matchChar('d') {
-						goto l434
-					}
-					break
-				default:
-					goto l434
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l434
-			}
+			goto l436
+		l437:
 			if !matchChar('>') {
 				goto l434
 			}
@@ -5525,38 +5517,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 98 HtmlBlockCloseDd <- ('<' Spnl '/' ((&[D] 'DD') | (&[d] 'dd')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l438
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l438
+			}
+			if !matchChar('/') {
+				goto l438
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l438
+				}
+				switch p.Buffer[position] {
+				case 'D':
+					position++ // matchString(`DD`)
+					if !matchChar('D') {
+						goto l438
+					}
+					break
+				case 'd':
+					position++ // matchString(`dd`)
+					if !matchChar('d') {
+						goto l438
+					}
+					break
+				default:
+					goto l438
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l438
+			}
+			if !matchChar('>') {
+				goto l438
+			}
+			return true
+		l438:
+			position = position0
+			return false
+		},
 		/* 99 HtmlBlockDd <- (HtmlBlockOpenDd (HtmlBlockDd / (!HtmlBlockCloseDd .))* HtmlBlockCloseDd) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenDd]() {
-				goto l436
+				goto l440
 			}
-		l437:
+		l441:
 			{
-				position438 := position
+				position442 := position
 				if !p.rules[ruleHtmlBlockDd]() {
-					goto l440
+					goto l444
 				}
-				goto l439
-			l440:
+				goto l443
+			l444:
 				if !p.rules[ruleHtmlBlockCloseDd]() {
-					goto l441
+					goto l445
 				}
-				goto l438
-			l441:
+				goto l442
+			l445:
 				if !matchDot() {
-					goto l438
+					goto l442
 				}
-			l439:
-				goto l437
-			l438:
-				position = position438
+			l443:
+				goto l441
+			l442:
+				position = position442
 			}
 			if !p.rules[ruleHtmlBlockCloseDd]() {
-				goto l436
+				goto l440
 			}
 			return true
-		l436:
+		l440:
 			position = position0
 			return false
 		},
@@ -5564,85 +5600,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l442
+				goto l446
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l442
+				goto l446
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l442
+					goto l446
 				}
 				switch p.Buffer[position] {
 				case 'D':
 					position++ // matchString(`DT`)
 					if !matchChar('T') {
-						goto l442
+						goto l446
 					}
 					break
 				case 'd':
 					position++ // matchString(`dt`)
 					if !matchChar('t') {
-						goto l442
+						goto l446
 					}
 					break
 				default:
-					goto l442
+					goto l446
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l442
+				goto l446
 			}
-		l444:
+		l448:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l445
+				goto l449
 			}
-			goto l444
-		l445:
-			if !matchChar('>') {
-				goto l442
-			}
-			return true
-		l442:
-			position = position0
-			return false
-		},
-		/* 101 HtmlBlockCloseDt <- ('<' Spnl '/' ((&[D] 'DT') | (&[d] 'dt')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l446
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l446
-			}
-			if !matchChar('/') {
-				goto l446
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l446
-				}
-				switch p.Buffer[position] {
-				case 'D':
-					position++ // matchString(`DT`)
-					if !matchChar('T') {
-						goto l446
-					}
-					break
-				case 'd':
-					position++ // matchString(`dt`)
-					if !matchChar('t') {
-						goto l446
-					}
-					break
-				default:
-					goto l446
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l446
-			}
+			goto l448
+		l449:
 			if !matchChar('>') {
 				goto l446
 			}
@@ -5651,38 +5643,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 101 HtmlBlockCloseDt <- ('<' Spnl '/' ((&[D] 'DT') | (&[d] 'dt')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l450
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l450
+			}
+			if !matchChar('/') {
+				goto l450
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l450
+				}
+				switch p.Buffer[position] {
+				case 'D':
+					position++ // matchString(`DT`)
+					if !matchChar('T') {
+						goto l450
+					}
+					break
+				case 'd':
+					position++ // matchString(`dt`)
+					if !matchChar('t') {
+						goto l450
+					}
+					break
+				default:
+					goto l450
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l450
+			}
+			if !matchChar('>') {
+				goto l450
+			}
+			return true
+		l450:
+			position = position0
+			return false
+		},
 		/* 102 HtmlBlockDt <- (HtmlBlockOpenDt (HtmlBlockDt / (!HtmlBlockCloseDt .))* HtmlBlockCloseDt) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenDt]() {
-				goto l448
+				goto l452
 			}
-		l449:
+		l453:
 			{
-				position450 := position
+				position454 := position
 				if !p.rules[ruleHtmlBlockDt]() {
-					goto l452
+					goto l456
 				}
-				goto l451
-			l452:
+				goto l455
+			l456:
 				if !p.rules[ruleHtmlBlockCloseDt]() {
-					goto l453
+					goto l457
 				}
-				goto l450
-			l453:
+				goto l454
+			l457:
 				if !matchDot() {
-					goto l450
+					goto l454
 				}
-			l451:
-				goto l449
-			l450:
-				position = position450
+			l455:
+				goto l453
+			l454:
+				position = position454
 			}
 			if !p.rules[ruleHtmlBlockCloseDt]() {
-				goto l448
+				goto l452
 			}
 			return true
-		l448:
+		l452:
 			position = position0
 			return false
 		},
@@ -5690,85 +5726,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l454
+				goto l458
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l454
+				goto l458
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l454
+					goto l458
 				}
 				switch p.Buffer[position] {
 				case 'F':
 					position++
 					if !matchString("RAMESET") {
-						goto l454
+						goto l458
 					}
 					break
 				case 'f':
 					position++
 					if !matchString("rameset") {
-						goto l454
+						goto l458
 					}
 					break
 				default:
-					goto l454
+					goto l458
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l454
+				goto l458
 			}
-		l456:
+		l460:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l457
+				goto l461
 			}
-			goto l456
-		l457:
-			if !matchChar('>') {
-				goto l454
-			}
-			return true
-		l454:
-			position = position0
-			return false
-		},
-		/* 104 HtmlBlockCloseFrameset <- ('<' Spnl '/' ((&[F] 'FRAMESET') | (&[f] 'frameset')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l458
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l458
-			}
-			if !matchChar('/') {
-				goto l458
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l458
-				}
-				switch p.Buffer[position] {
-				case 'F':
-					position++
-					if !matchString("RAMESET") {
-						goto l458
-					}
-					break
-				case 'f':
-					position++
-					if !matchString("rameset") {
-						goto l458
-					}
-					break
-				default:
-					goto l458
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l458
-			}
+			goto l460
+		l461:
 			if !matchChar('>') {
 				goto l458
 			}
@@ -5777,38 +5769,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 104 HtmlBlockCloseFrameset <- ('<' Spnl '/' ((&[F] 'FRAMESET') | (&[f] 'frameset')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l462
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l462
+			}
+			if !matchChar('/') {
+				goto l462
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l462
+				}
+				switch p.Buffer[position] {
+				case 'F':
+					position++
+					if !matchString("RAMESET") {
+						goto l462
+					}
+					break
+				case 'f':
+					position++
+					if !matchString("rameset") {
+						goto l462
+					}
+					break
+				default:
+					goto l462
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l462
+			}
+			if !matchChar('>') {
+				goto l462
+			}
+			return true
+		l462:
+			position = position0
+			return false
+		},
 		/* 105 HtmlBlockFrameset <- (HtmlBlockOpenFrameset (HtmlBlockFrameset / (!HtmlBlockCloseFrameset .))* HtmlBlockCloseFrameset) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenFrameset]() {
-				goto l460
+				goto l464
 			}
-		l461:
+		l465:
 			{
-				position462 := position
+				position466 := position
 				if !p.rules[ruleHtmlBlockFrameset]() {
-					goto l464
+					goto l468
 				}
-				goto l463
-			l464:
+				goto l467
+			l468:
 				if !p.rules[ruleHtmlBlockCloseFrameset]() {
-					goto l465
+					goto l469
 				}
-				goto l462
-			l465:
+				goto l466
+			l469:
 				if !matchDot() {
-					goto l462
+					goto l466
 				}
-			l463:
-				goto l461
-			l462:
-				position = position462
+			l467:
+				goto l465
+			l466:
+				position = position466
 			}
 			if !p.rules[ruleHtmlBlockCloseFrameset]() {
-				goto l460
+				goto l464
 			}
 			return true
-		l460:
+		l464:
 			position = position0
 			return false
 		},
@@ -5816,85 +5852,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l466
+				goto l470
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l466
+				goto l470
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l466
+					goto l470
 				}
 				switch p.Buffer[position] {
 				case 'L':
 					position++ // matchString(`LI`)
 					if !matchChar('I') {
-						goto l466
+						goto l470
 					}
 					break
 				case 'l':
 					position++ // matchString(`li`)
 					if !matchChar('i') {
-						goto l466
+						goto l470
 					}
 					break
 				default:
-					goto l466
+					goto l470
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l466
+				goto l470
 			}
-		l468:
+		l472:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l469
+				goto l473
 			}
-			goto l468
-		l469:
-			if !matchChar('>') {
-				goto l466
-			}
-			return true
-		l466:
-			position = position0
-			return false
-		},
-		/* 107 HtmlBlockCloseLi <- ('<' Spnl '/' ((&[L] 'LI') | (&[l] 'li')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l470
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l470
-			}
-			if !matchChar('/') {
-				goto l470
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l470
-				}
-				switch p.Buffer[position] {
-				case 'L':
-					position++ // matchString(`LI`)
-					if !matchChar('I') {
-						goto l470
-					}
-					break
-				case 'l':
-					position++ // matchString(`li`)
-					if !matchChar('i') {
-						goto l470
-					}
-					break
-				default:
-					goto l470
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l470
-			}
+			goto l472
+		l473:
 			if !matchChar('>') {
 				goto l470
 			}
@@ -5903,38 +5895,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 107 HtmlBlockCloseLi <- ('<' Spnl '/' ((&[L] 'LI') | (&[l] 'li')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l474
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l474
+			}
+			if !matchChar('/') {
+				goto l474
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l474
+				}
+				switch p.Buffer[position] {
+				case 'L':
+					position++ // matchString(`LI`)
+					if !matchChar('I') {
+						goto l474
+					}
+					break
+				case 'l':
+					position++ // matchString(`li`)
+					if !matchChar('i') {
+						goto l474
+					}
+					break
+				default:
+					goto l474
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l474
+			}
+			if !matchChar('>') {
+				goto l474
+			}
+			return true
+		l474:
+			position = position0
+			return false
+		},
 		/* 108 HtmlBlockLi <- (HtmlBlockOpenLi (HtmlBlockLi / (!HtmlBlockCloseLi .))* HtmlBlockCloseLi) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenLi]() {
-				goto l472
+				goto l476
 			}
-		l473:
+		l477:
 			{
-				position474 := position
+				position478 := position
 				if !p.rules[ruleHtmlBlockLi]() {
-					goto l476
+					goto l480
 				}
-				goto l475
-			l476:
+				goto l479
+			l480:
 				if !p.rules[ruleHtmlBlockCloseLi]() {
-					goto l477
+					goto l481
 				}
-				goto l474
-			l477:
+				goto l478
+			l481:
 				if !matchDot() {
-					goto l474
+					goto l478
 				}
-			l475:
-				goto l473
-			l474:
-				position = position474
+			l479:
+				goto l477
+			l478:
+				position = position478
 			}
 			if !p.rules[ruleHtmlBlockCloseLi]() {
-				goto l472
+				goto l476
 			}
 			return true
-		l472:
+		l476:
 			position = position0
 			return false
 		},
@@ -5942,85 +5978,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l478
+				goto l482
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l478
+				goto l482
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l478
+					goto l482
 				}
 				switch p.Buffer[position] {
 				case 'T':
 					position++
 					if !matchString("BODY") {
-						goto l478
+						goto l482
 					}
 					break
 				case 't':
 					position++
 					if !matchString("body") {
-						goto l478
+						goto l482
 					}
 					break
 				default:
-					goto l478
+					goto l482
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l478
+				goto l482
 			}
-		l480:
+		l484:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l481
+				goto l485
 			}
-			goto l480
-		l481:
-			if !matchChar('>') {
-				goto l478
-			}
-			return true
-		l478:
-			position = position0
-			return false
-		},
-		/* 110 HtmlBlockCloseTbody <- ('<' Spnl '/' ((&[T] 'TBODY') | (&[t] 'tbody')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l482
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l482
-			}
-			if !matchChar('/') {
-				goto l482
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l482
-				}
-				switch p.Buffer[position] {
-				case 'T':
-					position++
-					if !matchString("BODY") {
-						goto l482
-					}
-					break
-				case 't':
-					position++
-					if !matchString("body") {
-						goto l482
-					}
-					break
-				default:
-					goto l482
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l482
-			}
+			goto l484
+		l485:
 			if !matchChar('>') {
 				goto l482
 			}
@@ -6029,38 +6021,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 110 HtmlBlockCloseTbody <- ('<' Spnl '/' ((&[T] 'TBODY') | (&[t] 'tbody')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l486
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l486
+			}
+			if !matchChar('/') {
+				goto l486
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l486
+				}
+				switch p.Buffer[position] {
+				case 'T':
+					position++
+					if !matchString("BODY") {
+						goto l486
+					}
+					break
+				case 't':
+					position++
+					if !matchString("body") {
+						goto l486
+					}
+					break
+				default:
+					goto l486
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l486
+			}
+			if !matchChar('>') {
+				goto l486
+			}
+			return true
+		l486:
+			position = position0
+			return false
+		},
 		/* 111 HtmlBlockTbody <- (HtmlBlockOpenTbody (HtmlBlockTbody / (!HtmlBlockCloseTbody .))* HtmlBlockCloseTbody) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenTbody]() {
-				goto l484
+				goto l488
 			}
-		l485:
+		l489:
 			{
-				position486 := position
+				position490 := position
 				if !p.rules[ruleHtmlBlockTbody]() {
-					goto l488
+					goto l492
 				}
-				goto l487
-			l488:
+				goto l491
+			l492:
 				if !p.rules[ruleHtmlBlockCloseTbody]() {
-					goto l489
+					goto l493
 				}
-				goto l486
-			l489:
+				goto l490
+			l493:
 				if !matchDot() {
-					goto l486
+					goto l490
 				}
-			l487:
-				goto l485
-			l486:
-				position = position486
+			l491:
+				goto l489
+			l490:
+				position = position490
 			}
 			if !p.rules[ruleHtmlBlockCloseTbody]() {
-				goto l484
+				goto l488
 			}
 			return true
-		l484:
+		l488:
 			position = position0
 			return false
 		},
@@ -6068,85 +6104,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l490
+				goto l494
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l490
+				goto l494
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l490
+					goto l494
 				}
 				switch p.Buffer[position] {
 				case 'T':
 					position++ // matchString(`TD`)
 					if !matchChar('D') {
-						goto l490
+						goto l494
 					}
 					break
 				case 't':
 					position++ // matchString(`td`)
 					if !matchChar('d') {
-						goto l490
+						goto l494
 					}
 					break
 				default:
-					goto l490
+					goto l494
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l490
+				goto l494
 			}
-		l492:
+		l496:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l493
+				goto l497
 			}
-			goto l492
-		l493:
-			if !matchChar('>') {
-				goto l490
-			}
-			return true
-		l490:
-			position = position0
-			return false
-		},
-		/* 113 HtmlBlockCloseTd <- ('<' Spnl '/' ((&[T] 'TD') | (&[t] 'td')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l494
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l494
-			}
-			if !matchChar('/') {
-				goto l494
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l494
-				}
-				switch p.Buffer[position] {
-				case 'T':
-					position++ // matchString(`TD`)
-					if !matchChar('D') {
-						goto l494
-					}
-					break
-				case 't':
-					position++ // matchString(`td`)
-					if !matchChar('d') {
-						goto l494
-					}
-					break
-				default:
-					goto l494
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l494
-			}
+			goto l496
+		l497:
 			if !matchChar('>') {
 				goto l494
 			}
@@ -6155,38 +6147,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 113 HtmlBlockCloseTd <- ('<' Spnl '/' ((&[T] 'TD') | (&[t] 'td')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l498
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l498
+			}
+			if !matchChar('/') {
+				goto l498
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l498
+				}
+				switch p.Buffer[position] {
+				case 'T':
+					position++ // matchString(`TD`)
+					if !matchChar('D') {
+						goto l498
+					}
+					break
+				case 't':
+					position++ // matchString(`td`)
+					if !matchChar('d') {
+						goto l498
+					}
+					break
+				default:
+					goto l498
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l498
+			}
+			if !matchChar('>') {
+				goto l498
+			}
+			return true
+		l498:
+			position = position0
+			return false
+		},
 		/* 114 HtmlBlockTd <- (HtmlBlockOpenTd (HtmlBlockTd / (!HtmlBlockCloseTd .))* HtmlBlockCloseTd) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenTd]() {
-				goto l496
+				goto l500
 			}
-		l497:
+		l501:
 			{
-				position498 := position
+				position502 := position
 				if !p.rules[ruleHtmlBlockTd]() {
-					goto l500
+					goto l504
 				}
-				goto l499
-			l500:
+				goto l503
+			l504:
 				if !p.rules[ruleHtmlBlockCloseTd]() {
-					goto l501
+					goto l505
 				}
-				goto l498
-			l501:
+				goto l502
+			l505:
 				if !matchDot() {
-					goto l498
+					goto l502
 				}
-			l499:
-				goto l497
-			l498:
-				position = position498
+			l503:
+				goto l501
+			l502:
+				position = position502
 			}
 			if !p.rules[ruleHtmlBlockCloseTd]() {
-				goto l496
+				goto l500
 			}
 			return true
-		l496:
+		l500:
 			position = position0
 			return false
 		},
@@ -6194,85 +6230,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l502
+				goto l506
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l502
+				goto l506
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l502
+					goto l506
 				}
 				switch p.Buffer[position] {
 				case 'T':
 					position++
 					if !matchString("FOOT") {
-						goto l502
+						goto l506
 					}
 					break
 				case 't':
 					position++
 					if !matchString("foot") {
-						goto l502
+						goto l506
 					}
 					break
 				default:
-					goto l502
+					goto l506
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l502
+				goto l506
 			}
-		l504:
+		l508:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l505
+				goto l509
 			}
-			goto l504
-		l505:
-			if !matchChar('>') {
-				goto l502
-			}
-			return true
-		l502:
-			position = position0
-			return false
-		},
-		/* 116 HtmlBlockCloseTfoot <- ('<' Spnl '/' ((&[T] 'TFOOT') | (&[t] 'tfoot')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l506
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l506
-			}
-			if !matchChar('/') {
-				goto l506
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l506
-				}
-				switch p.Buffer[position] {
-				case 'T':
-					position++
-					if !matchString("FOOT") {
-						goto l506
-					}
-					break
-				case 't':
-					position++
-					if !matchString("foot") {
-						goto l506
-					}
-					break
-				default:
-					goto l506
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l506
-			}
+			goto l508
+		l509:
 			if !matchChar('>') {
 				goto l506
 			}
@@ -6281,38 +6273,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 116 HtmlBlockCloseTfoot <- ('<' Spnl '/' ((&[T] 'TFOOT') | (&[t] 'tfoot')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l510
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l510
+			}
+			if !matchChar('/') {
+				goto l510
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l510
+				}
+				switch p.Buffer[position] {
+				case 'T':
+					position++
+					if !matchString("FOOT") {
+						goto l510
+					}
+					break
+				case 't':
+					position++
+					if !matchString("foot") {
+						goto l510
+					}
+					break
+				default:
+					goto l510
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l510
+			}
+			if !matchChar('>') {
+				goto l510
+			}
+			return true
+		l510:
+			position = position0
+			return false
+		},
 		/* 117 HtmlBlockTfoot <- (HtmlBlockOpenTfoot (HtmlBlockTfoot / (!HtmlBlockCloseTfoot .))* HtmlBlockCloseTfoot) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenTfoot]() {
-				goto l508
+				goto l512
 			}
-		l509:
+		l513:
 			{
-				position510 := position
+				position514 := position
 				if !p.rules[ruleHtmlBlockTfoot]() {
-					goto l512
+					goto l516
 				}
-				goto l511
-			l512:
+				goto l515
+			l516:
 				if !p.rules[ruleHtmlBlockCloseTfoot]() {
-					goto l513
+					goto l517
 				}
-				goto l510
-			l513:
+				goto l514
+			l517:
 				if !matchDot() {
-					goto l510
+					goto l514
 				}
-			l511:
-				goto l509
-			l510:
-				position = position510
+			l515:
+				goto l513
+			l514:
+				position = position514
 			}
 			if !p.rules[ruleHtmlBlockCloseTfoot]() {
-				goto l508
+				goto l512
 			}
 			return true
-		l508:
+		l512:
 			position = position0
 			return false
 		},
@@ -6320,85 +6356,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l514
+				goto l518
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l514
+				goto l518
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l514
+					goto l518
 				}
 				switch p.Buffer[position] {
 				case 'T':
 					position++ // matchString(`TH`)
 					if !matchChar('H') {
-						goto l514
+						goto l518
 					}
 					break
 				case 't':
 					position++ // matchString(`th`)
 					if !matchChar('h') {
-						goto l514
+						goto l518
 					}
 					break
 				default:
-					goto l514
+					goto l518
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l514
+				goto l518
 			}
-		l516:
+		l520:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l517
+				goto l521
 			}
-			goto l516
-		l517:
-			if !matchChar('>') {
-				goto l514
-			}
-			return true
-		l514:
-			position = position0
-			return false
-		},
-		/* 119 HtmlBlockCloseTh <- ('<' Spnl '/' ((&[T] 'TH') | (&[t] 'th')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l518
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l518
-			}
-			if !matchChar('/') {
-				goto l518
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l518
-				}
-				switch p.Buffer[position] {
-				case 'T':
-					position++ // matchString(`TH`)
-					if !matchChar('H') {
-						goto l518
-					}
-					break
-				case 't':
-					position++ // matchString(`th`)
-					if !matchChar('h') {
-						goto l518
-					}
-					break
-				default:
-					goto l518
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l518
-			}
+			goto l520
+		l521:
 			if !matchChar('>') {
 				goto l518
 			}
@@ -6407,38 +6399,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 119 HtmlBlockCloseTh <- ('<' Spnl '/' ((&[T] 'TH') | (&[t] 'th')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l522
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l522
+			}
+			if !matchChar('/') {
+				goto l522
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l522
+				}
+				switch p.Buffer[position] {
+				case 'T':
+					position++ // matchString(`TH`)
+					if !matchChar('H') {
+						goto l522
+					}
+					break
+				case 't':
+					position++ // matchString(`th`)
+					if !matchChar('h') {
+						goto l522
+					}
+					break
+				default:
+					goto l522
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l522
+			}
+			if !matchChar('>') {
+				goto l522
+			}
+			return true
+		l522:
+			position = position0
+			return false
+		},
 		/* 120 HtmlBlockTh <- (HtmlBlockOpenTh (HtmlBlockTh / (!HtmlBlockCloseTh .))* HtmlBlockCloseTh) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenTh]() {
-				goto l520
+				goto l524
 			}
-		l521:
+		l525:
 			{
-				position522 := position
+				position526 := position
 				if !p.rules[ruleHtmlBlockTh]() {
-					goto l524
+					goto l528
 				}
-				goto l523
-			l524:
+				goto l527
+			l528:
 				if !p.rules[ruleHtmlBlockCloseTh]() {
-					goto l525
+					goto l529
 				}
-				goto l522
-			l525:
+				goto l526
+			l529:
 				if !matchDot() {
-					goto l522
+					goto l526
 				}
-			l523:
-				goto l521
-			l522:
-				position = position522
+			l527:
+				goto l525
+			l526:
+				position = position526
 			}
 			if !p.rules[ruleHtmlBlockCloseTh]() {
-				goto l520
+				goto l524
 			}
 			return true
-		l520:
+		l524:
 			position = position0
 			return false
 		},
@@ -6446,85 +6482,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l526
+				goto l530
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l526
+				goto l530
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l526
+					goto l530
 				}
 				switch p.Buffer[position] {
 				case 'T':
 					position++
 					if !matchString("HEAD") {
-						goto l526
+						goto l530
 					}
 					break
 				case 't':
 					position++
 					if !matchString("head") {
-						goto l526
+						goto l530
 					}
 					break
 				default:
-					goto l526
+					goto l530
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l526
+				goto l530
 			}
-		l528:
+		l532:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l529
+				goto l533
 			}
-			goto l528
-		l529:
-			if !matchChar('>') {
-				goto l526
-			}
-			return true
-		l526:
-			position = position0
-			return false
-		},
-		/* 122 HtmlBlockCloseThead <- ('<' Spnl '/' ((&[T] 'THEAD') | (&[t] 'thead')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l530
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l530
-			}
-			if !matchChar('/') {
-				goto l530
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l530
-				}
-				switch p.Buffer[position] {
-				case 'T':
-					position++
-					if !matchString("HEAD") {
-						goto l530
-					}
-					break
-				case 't':
-					position++
-					if !matchString("head") {
-						goto l530
-					}
-					break
-				default:
-					goto l530
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l530
-			}
+			goto l532
+		l533:
 			if !matchChar('>') {
 				goto l530
 			}
@@ -6533,38 +6525,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 122 HtmlBlockCloseThead <- ('<' Spnl '/' ((&[T] 'THEAD') | (&[t] 'thead')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l534
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l534
+			}
+			if !matchChar('/') {
+				goto l534
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l534
+				}
+				switch p.Buffer[position] {
+				case 'T':
+					position++
+					if !matchString("HEAD") {
+						goto l534
+					}
+					break
+				case 't':
+					position++
+					if !matchString("head") {
+						goto l534
+					}
+					break
+				default:
+					goto l534
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l534
+			}
+			if !matchChar('>') {
+				goto l534
+			}
+			return true
+		l534:
+			position = position0
+			return false
+		},
 		/* 123 HtmlBlockThead <- (HtmlBlockOpenThead (HtmlBlockThead / (!HtmlBlockCloseThead .))* HtmlBlockCloseThead) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenThead]() {
-				goto l532
+				goto l536
 			}
-		l533:
+		l537:
 			{
-				position534 := position
+				position538 := position
 				if !p.rules[ruleHtmlBlockThead]() {
-					goto l536
+					goto l540
 				}
-				goto l535
-			l536:
+				goto l539
+			l540:
 				if !p.rules[ruleHtmlBlockCloseThead]() {
-					goto l537
+					goto l541
 				}
-				goto l534
-			l537:
+				goto l538
+			l541:
 				if !matchDot() {
-					goto l534
+					goto l538
 				}
-			l535:
-				goto l533
-			l534:
-				position = position534
+			l539:
+				goto l537
+			l538:
+				position = position538
 			}
 			if !p.rules[ruleHtmlBlockCloseThead]() {
-				goto l532
+				goto l536
 			}
 			return true
-		l532:
+		l536:
 			position = position0
 			return false
 		},
@@ -6572,85 +6608,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l538
+				goto l542
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l538
+				goto l542
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l538
+					goto l542
 				}
 				switch p.Buffer[position] {
 				case 'T':
 					position++ // matchString(`TR`)
 					if !matchChar('R') {
-						goto l538
+						goto l542
 					}
 					break
 				case 't':
 					position++ // matchString(`tr`)
 					if !matchChar('r') {
-						goto l538
+						goto l542
 					}
 					break
 				default:
-					goto l538
+					goto l542
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l538
+				goto l542
 			}
-		l540:
+		l544:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l541
+				goto l545
 			}
-			goto l540
-		l541:
-			if !matchChar('>') {
-				goto l538
-			}
-			return true
-		l538:
-			position = position0
-			return false
-		},
-		/* 125 HtmlBlockCloseTr <- ('<' Spnl '/' ((&[T] 'TR') | (&[t] 'tr')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l542
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l542
-			}
-			if !matchChar('/') {
-				goto l542
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l542
-				}
-				switch p.Buffer[position] {
-				case 'T':
-					position++ // matchString(`TR`)
-					if !matchChar('R') {
-						goto l542
-					}
-					break
-				case 't':
-					position++ // matchString(`tr`)
-					if !matchChar('r') {
-						goto l542
-					}
-					break
-				default:
-					goto l542
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l542
-			}
+			goto l544
+		l545:
 			if !matchChar('>') {
 				goto l542
 			}
@@ -6659,38 +6651,82 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 125 HtmlBlockCloseTr <- ('<' Spnl '/' ((&[T] 'TR') | (&[t] 'tr')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l546
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l546
+			}
+			if !matchChar('/') {
+				goto l546
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l546
+				}
+				switch p.Buffer[position] {
+				case 'T':
+					position++ // matchString(`TR`)
+					if !matchChar('R') {
+						goto l546
+					}
+					break
+				case 't':
+					position++ // matchString(`tr`)
+					if !matchChar('r') {
+						goto l546
+					}
+					break
+				default:
+					goto l546
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l546
+			}
+			if !matchChar('>') {
+				goto l546
+			}
+			return true
+		l546:
+			position = position0
+			return false
+		},
 		/* 126 HtmlBlockTr <- (HtmlBlockOpenTr (HtmlBlockTr / (!HtmlBlockCloseTr .))* HtmlBlockCloseTr) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenTr]() {
-				goto l544
+				goto l548
 			}
-		l545:
+		l549:
 			{
-				position546 := position
+				position550 := position
 				if !p.rules[ruleHtmlBlockTr]() {
-					goto l548
+					goto l552
 				}
-				goto l547
-			l548:
+				goto l551
+			l552:
 				if !p.rules[ruleHtmlBlockCloseTr]() {
-					goto l549
+					goto l553
 				}
-				goto l546
-			l549:
+				goto l550
+			l553:
 				if !matchDot() {
-					goto l546
+					goto l550
 				}
-			l547:
-				goto l545
-			l546:
-				position = position546
+			l551:
+				goto l549
+			l550:
+				position = position550
 			}
 			if !p.rules[ruleHtmlBlockCloseTr]() {
-				goto l544
+				goto l548
 			}
 			return true
-		l544:
+		l548:
 			position = position0
 			return false
 		},
@@ -6698,85 +6734,41 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l550
+				goto l554
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l550
+				goto l554
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l550
+					goto l554
 				}
 				switch p.Buffer[position] {
 				case 'S':
 					position++
 					if !matchString("CRIPT") {
-						goto l550
+						goto l554
 					}
 					break
 				case 's':
 					position++
 					if !matchString("cript") {
-						goto l550
+						goto l554
 					}
 					break
 				default:
-					goto l550
+					goto l554
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l550
+				goto l554
 			}
-		l552:
+		l556:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l553
+				goto l557
 			}
-			goto l552
-		l553:
-			if !matchChar('>') {
-				goto l550
-			}
-			return true
-		l550:
-			position = position0
-			return false
-		},
-		/* 128 HtmlBlockCloseScript <- ('<' Spnl '/' ((&[S] 'SCRIPT') | (&[s] 'script')) Spnl '>') */
-		func() bool {
-			position0 := position
-			if !matchChar('<') {
-				goto l554
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l554
-			}
-			if !matchChar('/') {
-				goto l554
-			}
-			{
-				if position == len(p.Buffer) {
-					goto l554
-				}
-				switch p.Buffer[position] {
-				case 'S':
-					position++
-					if !matchString("CRIPT") {
-						goto l554
-					}
-					break
-				case 's':
-					position++
-					if !matchString("cript") {
-						goto l554
-					}
-					break
-				default:
-					goto l554
-				}
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l554
-			}
+			goto l556
+		l557:
 			if !matchChar('>') {
 				goto l554
 			}
@@ -6785,251 +6777,289 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
-		/* 129 HtmlBlockScript <- (HtmlBlockOpenScript (HtmlBlockScript / (!HtmlBlockCloseScript .))* HtmlBlockCloseScript) */
+		/* 128 HtmlBlockCloseScript <- ('<' Spnl '/' ((&[S] 'SCRIPT') | (&[s] 'script')) Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l558
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l558
+			}
+			if !matchChar('/') {
+				goto l558
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l558
+				}
+				switch p.Buffer[position] {
+				case 'S':
+					position++
+					if !matchString("CRIPT") {
+						goto l558
+					}
+					break
+				case 's':
+					position++
+					if !matchString("cript") {
+						goto l558
+					}
+					break
+				default:
+					goto l558
+				}
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l558
+			}
+			if !matchChar('>') {
+				goto l558
+			}
+			return true
+		l558:
+			position = position0
+			return false
+		},
+		/* 129 HtmlBlockScript <- (HtmlBlockOpenScript (!HtmlBlockCloseScript .)* HtmlBlockCloseScript) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHtmlBlockOpenScript]() {
-				goto l556
+				goto l560
 			}
-		l557:
+		l561:
 			{
-				position558 := position
-				if !p.rules[ruleHtmlBlockScript]() {
-					goto l560
-				}
-				goto l559
-			l560:
+				position562 := position
 				if !p.rules[ruleHtmlBlockCloseScript]() {
-					goto l561
+					goto l563
 				}
-				goto l558
-			l561:
+				goto l562
+			l563:
 				if !matchDot() {
-					goto l558
+					goto l562
 				}
-			l559:
-				goto l557
-			l558:
-				position = position558
+				goto l561
+			l562:
+				position = position562
 			}
 			if !p.rules[ruleHtmlBlockCloseScript]() {
-				goto l556
+				goto l560
 			}
 			return true
-		l556:
+		l560:
 			position = position0
 			return false
 		},
 		/* 130 HtmlBlockInTags <- (HtmlBlockAddress / HtmlBlockBlockquote / HtmlBlockCenter / HtmlBlockDir / HtmlBlockDiv / HtmlBlockDl / HtmlBlockFieldset / HtmlBlockForm / HtmlBlockH1 / HtmlBlockH2 / HtmlBlockH3 / HtmlBlockH4 / HtmlBlockH5 / HtmlBlockH6 / HtmlBlockMenu / HtmlBlockNoframes / HtmlBlockNoscript / HtmlBlockOl / HtmlBlockP / HtmlBlockPre / HtmlBlockTable / HtmlBlockUl / HtmlBlockDd / HtmlBlockDt / HtmlBlockFrameset / HtmlBlockLi / HtmlBlockTbody / HtmlBlockTd / HtmlBlockTfoot / HtmlBlockTh / HtmlBlockThead / HtmlBlockTr / HtmlBlockScript) */
 		func() bool {
 			if !p.rules[ruleHtmlBlockAddress]() {
-				goto l564
-			}
-			goto l563
-		l564:
-			if !p.rules[ruleHtmlBlockBlockquote]() {
-				goto l565
-			}
-			goto l563
-		l565:
-			if !p.rules[ruleHtmlBlockCenter]() {
 				goto l566
 			}
-			goto l563
+			goto l565
 		l566:
-			if !p.rules[ruleHtmlBlockDir]() {
+			if !p.rules[ruleHtmlBlockBlockquote]() {
 				goto l567
 			}
-			goto l563
+			goto l565
 		l567:
-			if !p.rules[ruleHtmlBlockDiv]() {
+			if !p.rules[ruleHtmlBlockCenter]() {
 				goto l568
 			}
-			goto l563
+			goto l565
 		l568:
-			if !p.rules[ruleHtmlBlockDl]() {
+			if !p.rules[ruleHtmlBlockDir]() {
 				goto l569
 			}
-			goto l563
+			goto l565
 		l569:
-			if !p.rules[ruleHtmlBlockFieldset]() {
+			if !p.rules[ruleHtmlBlockDiv]() {
 				goto l570
 			}
-			goto l563
+			goto l565
 		l570:
-			if !p.rules[ruleHtmlBlockForm]() {
+			if !p.rules[ruleHtmlBlockDl]() {
 				goto l571
 			}
-			goto l563
+			goto l565
 		l571:
-			if !p.rules[ruleHtmlBlockH1]() {
+			if !p.rules[ruleHtmlBlockFieldset]() {
 				goto l572
 			}
-			goto l563
+			goto l565
 		l572:
-			if !p.rules[ruleHtmlBlockH2]() {
+			if !p.rules[ruleHtmlBlockForm]() {
 				goto l573
 			}
-			goto l563
+			goto l565
 		l573:
-			if !p.rules[ruleHtmlBlockH3]() {
+			if !p.rules[ruleHtmlBlockH1]() {
 				goto l574
 			}
-			goto l563
+			goto l565
 		l574:
-			if !p.rules[ruleHtmlBlockH4]() {
+			if !p.rules[ruleHtmlBlockH2]() {
 				goto l575
 			}
-			goto l563
+			goto l565
 		l575:
-			if !p.rules[ruleHtmlBlockH5]() {
+			if !p.rules[ruleHtmlBlockH3]() {
 				goto l576
 			}
-			goto l563
+			goto l565
 		l576:
-			if !p.rules[ruleHtmlBlockH6]() {
+			if !p.rules[ruleHtmlBlockH4]() {
 				goto l577
 			}
-			goto l563
+			goto l565
 		l577:
-			if !p.rules[ruleHtmlBlockMenu]() {
+			if !p.rules[ruleHtmlBlockH5]() {
 				goto l578
 			}
-			goto l563
+			goto l565
 		l578:
-			if !p.rules[ruleHtmlBlockNoframes]() {
+			if !p.rules[ruleHtmlBlockH6]() {
 				goto l579
 			}
-			goto l563
+			goto l565
 		l579:
-			if !p.rules[ruleHtmlBlockNoscript]() {
+			if !p.rules[ruleHtmlBlockMenu]() {
 				goto l580
 			}
-			goto l563
+			goto l565
 		l580:
-			if !p.rules[ruleHtmlBlockOl]() {
+			if !p.rules[ruleHtmlBlockNoframes]() {
 				goto l581
 			}
-			goto l563
+			goto l565
 		l581:
-			if !p.rules[ruleHtmlBlockP]() {
+			if !p.rules[ruleHtmlBlockNoscript]() {
 				goto l582
 			}
-			goto l563
+			goto l565
 		l582:
-			if !p.rules[ruleHtmlBlockPre]() {
+			if !p.rules[ruleHtmlBlockOl]() {
 				goto l583
 			}
-			goto l563
+			goto l565
 		l583:
-			if !p.rules[ruleHtmlBlockTable]() {
+			if !p.rules[ruleHtmlBlockP]() {
 				goto l584
 			}
-			goto l563
+			goto l565
 		l584:
-			if !p.rules[ruleHtmlBlockUl]() {
+			if !p.rules[ruleHtmlBlockPre]() {
 				goto l585
 			}
-			goto l563
+			goto l565
 		l585:
-			if !p.rules[ruleHtmlBlockDd]() {
+			if !p.rules[ruleHtmlBlockTable]() {
 				goto l586
 			}
-			goto l563
+			goto l565
 		l586:
-			if !p.rules[ruleHtmlBlockDt]() {
+			if !p.rules[ruleHtmlBlockUl]() {
 				goto l587
 			}
-			goto l563
+			goto l565
 		l587:
-			if !p.rules[ruleHtmlBlockFrameset]() {
+			if !p.rules[ruleHtmlBlockDd]() {
 				goto l588
 			}
-			goto l563
+			goto l565
 		l588:
-			if !p.rules[ruleHtmlBlockLi]() {
+			if !p.rules[ruleHtmlBlockDt]() {
 				goto l589
 			}
-			goto l563
+			goto l565
 		l589:
-			if !p.rules[ruleHtmlBlockTbody]() {
+			if !p.rules[ruleHtmlBlockFrameset]() {
 				goto l590
 			}
-			goto l563
+			goto l565
 		l590:
-			if !p.rules[ruleHtmlBlockTd]() {
+			if !p.rules[ruleHtmlBlockLi]() {
 				goto l591
 			}
-			goto l563
+			goto l565
 		l591:
-			if !p.rules[ruleHtmlBlockTfoot]() {
+			if !p.rules[ruleHtmlBlockTbody]() {
 				goto l592
 			}
-			goto l563
+			goto l565
 		l592:
-			if !p.rules[ruleHtmlBlockTh]() {
+			if !p.rules[ruleHtmlBlockTd]() {
 				goto l593
 			}
-			goto l563
+			goto l565
 		l593:
-			if !p.rules[ruleHtmlBlockThead]() {
+			if !p.rules[ruleHtmlBlockTfoot]() {
 				goto l594
 			}
-			goto l563
+			goto l565
 		l594:
-			if !p.rules[ruleHtmlBlockTr]() {
+			if !p.rules[ruleHtmlBlockTh]() {
 				goto l595
 			}
-			goto l563
+			goto l565
 		l595:
-			if !p.rules[ruleHtmlBlockScript]() {
-				goto l562
+			if !p.rules[ruleHtmlBlockThead]() {
+				goto l596
 			}
-		l563:
+			goto l565
+		l596:
+			if !p.rules[ruleHtmlBlockTr]() {
+				goto l597
+			}
+			goto l565
+		l597:
+			if !p.rules[ruleHtmlBlockScript]() {
+				goto l564
+			}
+		l565:
 			return true
-		l562:
+		l564:
 			return false
 		},
 		/* 131 HtmlBlock <- (&'<' < (HtmlBlockInTags / HtmlComment / HtmlBlockSelfClosing) > BlankLine+ {   if p.extension.FilterHTML {
-                    yy = mk_list(LIST, nil)
+                    yy = p.mkList(LIST, nil)
                 } else {
-                    yy = mk_str(yytext)
+                    yy = p.mkString(yytext)
                     yy.key = HTMLBLOCK
                 }
             }) */
 		func() bool {
 			position0 := position
 			if !peekChar('<') {
-				goto l596
+				goto l598
 			}
 			begin = position
 			if !p.rules[ruleHtmlBlockInTags]() {
-				goto l598
+				goto l600
 			}
-			goto l597
-		l598:
-			if !p.rules[ruleHtmlComment]() {
-				goto l599
-			}
-			goto l597
-		l599:
-			if !p.rules[ruleHtmlBlockSelfClosing]() {
-				goto l596
-			}
-		l597:
-			end = position
-			if !p.rules[ruleBlankLine]() {
-				goto l596
-			}
+			goto l599
 		l600:
-			if !p.rules[ruleBlankLine]() {
+			if !p.rules[ruleHtmlComment]() {
 				goto l601
 			}
-			goto l600
+			goto l599
 		l601:
+			if !p.rules[ruleHtmlBlockSelfClosing]() {
+				goto l598
+			}
+		l599:
+			end = position
+			if !p.rules[ruleBlankLine]() {
+				goto l598
+			}
+		l602:
+			if !p.rules[ruleBlankLine]() {
+				goto l603
+			}
+			goto l602
+		l603:
 			do(41)
 			return true
-		l596:
+		l598:
 			position = position0
 			return false
 		},
@@ -7037,477 +7067,477 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l602
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l602
-			}
-			if !p.rules[ruleHtmlBlockType]() {
-				goto l602
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l602
-			}
-		l603:
-			if !p.rules[ruleHtmlAttribute]() {
 				goto l604
 			}
-			goto l603
-		l604:
-			if !matchChar('/') {
-				goto l602
+			if !p.rules[ruleSpnl]() {
+				goto l604
+			}
+			if !p.rules[ruleHtmlBlockType]() {
+				goto l604
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l602
+				goto l604
+			}
+		l605:
+			if !p.rules[ruleHtmlAttribute]() {
+				goto l606
+			}
+			goto l605
+		l606:
+			if !matchChar('/') {
+				goto l604
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l604
 			}
 			if !matchChar('>') {
-				goto l602
+				goto l604
 			}
 			return true
-		l602:
+		l604:
 			position = position0
 			return false
 		},
 		/* 133 HtmlBlockType <- ('dir' / 'div' / 'dl' / 'fieldset' / 'form' / 'h1' / 'h2' / 'h3' / 'h4' / 'h5' / 'h6' / 'noframes' / 'p' / 'table' / 'dd' / 'tbody' / 'td' / 'tfoot' / 'th' / 'thead' / 'DIR' / 'DIV' / 'DL' / 'FIELDSET' / 'FORM' / 'H1' / 'H2' / 'H3' / 'H4' / 'H5' / 'H6' / 'NOFRAMES' / 'P' / 'TABLE' / 'DD' / 'TBODY' / 'TD' / 'TFOOT' / 'TH' / 'THEAD' / ((&[S] 'SCRIPT') | (&[T] 'TR') | (&[L] 'LI') | (&[F] 'FRAMESET') | (&[D] 'DT') | (&[U] 'UL') | (&[P] 'PRE') | (&[O] 'OL') | (&[N] 'NOSCRIPT') | (&[M] 'MENU') | (&[I] 'ISINDEX') | (&[H] 'HR') | (&[C] 'CENTER') | (&[B] 'BLOCKQUOTE') | (&[A] 'ADDRESS') | (&[s] 'script') | (&[t] 'tr') | (&[l] 'li') | (&[f] 'frameset') | (&[d] 'dt') | (&[u] 'ul') | (&[p] 'pre') | (&[o] 'ol') | (&[n] 'noscript') | (&[m] 'menu') | (&[i] 'isindex') | (&[h] 'hr') | (&[c] 'center') | (&[b] 'blockquote') | (&[a] 'address'))) */
 		func() bool {
 			if !matchString("dir") {
-				goto l607
-			}
-			goto l606
-		l607:
-			if !matchString("div") {
-				goto l608
-			}
-			goto l606
-		l608:
-			if !matchString("dl") {
 				goto l609
 			}
-			goto l606
+			goto l608
 		l609:
-			if !matchString("fieldset") {
+			if !matchString("div") {
 				goto l610
 			}
-			goto l606
+			goto l608
 		l610:
-			if !matchString("form") {
+			if !matchString("dl") {
 				goto l611
 			}
-			goto l606
+			goto l608
 		l611:
-			if !matchString("h1") {
+			if !matchString("fieldset") {
 				goto l612
 			}
-			goto l606
+			goto l608
 		l612:
-			if !matchString("h2") {
+			if !matchString("form") {
 				goto l613
 			}
-			goto l606
+			goto l608
 		l613:
-			if !matchString("h3") {
+			if !matchString("h1") {
 				goto l614
 			}
-			goto l606
+			goto l608
 		l614:
-			if !matchString("h4") {
+			if !matchString("h2") {
 				goto l615
 			}
-			goto l606
+			goto l608
 		l615:
-			if !matchString("h5") {
+			if !matchString("h3") {
 				goto l616
 			}
-			goto l606
+			goto l608
 		l616:
-			if !matchString("h6") {
+			if !matchString("h4") {
 				goto l617
 			}
-			goto l606
+			goto l608
 		l617:
-			if !matchString("noframes") {
+			if !matchString("h5") {
 				goto l618
 			}
-			goto l606
+			goto l608
 		l618:
-			if !matchChar('p') {
+			if !matchString("h6") {
 				goto l619
 			}
-			goto l606
+			goto l608
 		l619:
-			if !matchString("table") {
+			if !matchString("noframes") {
 				goto l620
 			}
-			goto l606
+			goto l608
 		l620:
-			if !matchString("dd") {
+			if !matchChar('p') {
 				goto l621
 			}
-			goto l606
+			goto l608
 		l621:
-			if !matchString("tbody") {
+			if !matchString("table") {
 				goto l622
 			}
-			goto l606
+			goto l608
 		l622:
-			if !matchString("td") {
+			if !matchString("dd") {
 				goto l623
 			}
-			goto l606
+			goto l608
 		l623:
-			if !matchString("tfoot") {
+			if !matchString("tbody") {
 				goto l624
 			}
-			goto l606
+			goto l608
 		l624:
-			if !matchString("th") {
+			if !matchString("td") {
 				goto l625
 			}
-			goto l606
+			goto l608
 		l625:
-			if !matchString("thead") {
+			if !matchString("tfoot") {
 				goto l626
 			}
-			goto l606
+			goto l608
 		l626:
-			if !matchString("DIR") {
+			if !matchString("th") {
 				goto l627
 			}
-			goto l606
+			goto l608
 		l627:
-			if !matchString("DIV") {
+			if !matchString("thead") {
 				goto l628
 			}
-			goto l606
+			goto l608
 		l628:
-			if !matchString("DL") {
+			if !matchString("DIR") {
 				goto l629
 			}
-			goto l606
+			goto l608
 		l629:
-			if !matchString("FIELDSET") {
+			if !matchString("DIV") {
 				goto l630
 			}
-			goto l606
+			goto l608
 		l630:
-			if !matchString("FORM") {
+			if !matchString("DL") {
 				goto l631
 			}
-			goto l606
+			goto l608
 		l631:
-			if !matchString("H1") {
+			if !matchString("FIELDSET") {
 				goto l632
 			}
-			goto l606
+			goto l608
 		l632:
-			if !matchString("H2") {
+			if !matchString("FORM") {
 				goto l633
 			}
-			goto l606
+			goto l608
 		l633:
-			if !matchString("H3") {
+			if !matchString("H1") {
 				goto l634
 			}
-			goto l606
+			goto l608
 		l634:
-			if !matchString("H4") {
+			if !matchString("H2") {
 				goto l635
 			}
-			goto l606
+			goto l608
 		l635:
-			if !matchString("H5") {
+			if !matchString("H3") {
 				goto l636
 			}
-			goto l606
+			goto l608
 		l636:
-			if !matchString("H6") {
+			if !matchString("H4") {
 				goto l637
 			}
-			goto l606
+			goto l608
 		l637:
-			if !matchString("NOFRAMES") {
+			if !matchString("H5") {
 				goto l638
 			}
-			goto l606
+			goto l608
 		l638:
-			if !matchChar('P') {
+			if !matchString("H6") {
 				goto l639
 			}
-			goto l606
+			goto l608
 		l639:
-			if !matchString("TABLE") {
+			if !matchString("NOFRAMES") {
 				goto l640
 			}
-			goto l606
+			goto l608
 		l640:
-			if !matchString("DD") {
+			if !matchChar('P') {
 				goto l641
 			}
-			goto l606
+			goto l608
 		l641:
-			if !matchString("TBODY") {
+			if !matchString("TABLE") {
 				goto l642
 			}
-			goto l606
+			goto l608
 		l642:
-			if !matchString("TD") {
+			if !matchString("DD") {
 				goto l643
 			}
-			goto l606
+			goto l608
 		l643:
-			if !matchString("TFOOT") {
+			if !matchString("TBODY") {
 				goto l644
 			}
-			goto l606
+			goto l608
 		l644:
-			if !matchString("TH") {
+			if !matchString("TD") {
 				goto l645
 			}
-			goto l606
+			goto l608
 		l645:
-			if !matchString("THEAD") {
+			if !matchString("TFOOT") {
 				goto l646
 			}
-			goto l606
+			goto l608
 		l646:
+			if !matchString("TH") {
+				goto l647
+			}
+			goto l608
+		l647:
+			if !matchString("THEAD") {
+				goto l648
+			}
+			goto l608
+		l648:
 			{
 				if position == len(p.Buffer) {
-					goto l605
+					goto l607
 				}
 				switch p.Buffer[position] {
 				case 'S':
 					position++
 					if !matchString("CRIPT") {
-						goto l605
+						goto l607
 					}
 					break
 				case 'T':
 					position++ // matchString(`TR`)
 					if !matchChar('R') {
-						goto l605
+						goto l607
 					}
 					break
 				case 'L':
 					position++ // matchString(`LI`)
 					if !matchChar('I') {
-						goto l605
+						goto l607
 					}
 					break
 				case 'F':
 					position++
 					if !matchString("RAMESET") {
-						goto l605
+						goto l607
 					}
 					break
 				case 'D':
 					position++ // matchString(`DT`)
 					if !matchChar('T') {
-						goto l605
+						goto l607
 					}
 					break
 				case 'U':
 					position++ // matchString(`UL`)
 					if !matchChar('L') {
-						goto l605
+						goto l607
 					}
 					break
 				case 'P':
 					position++
 					if !matchString("RE") {
-						goto l605
+						goto l607
 					}
 					break
 				case 'O':
 					position++ // matchString(`OL`)
 					if !matchChar('L') {
-						goto l605
+						goto l607
 					}
 					break
 				case 'N':
 					position++
 					if !matchString("OSCRIPT") {
-						goto l605
+						goto l607
 					}
 					break
 				case 'M':
 					position++
 					if !matchString("ENU") {
-						goto l605
+						goto l607
 					}
 					break
 				case 'I':
 					position++
 					if !matchString("SINDEX") {
-						goto l605
+						goto l607
 					}
 					break
 				case 'H':
 					position++ // matchString(`HR`)
 					if !matchChar('R') {
-						goto l605
+						goto l607
 					}
 					break
 				case 'C':
 					position++
 					if !matchString("ENTER") {
-						goto l605
+						goto l607
 					}
 					break
 				case 'B':
 					position++
 					if !matchString("LOCKQUOTE") {
-						goto l605
+						goto l607
 					}
 					break
 				case 'A':
 					position++
 					if !matchString("DDRESS") {
-						goto l605
+						goto l607
 					}
 					break
 				case 's':
 					position++
 					if !matchString("cript") {
-						goto l605
+						goto l607
 					}
 					break
 				case 't':
 					position++ // matchString(`tr`)
 					if !matchChar('r') {
-						goto l605
+						goto l607
 					}
 					break
 				case 'l':
 					position++ // matchString(`li`)
 					if !matchChar('i') {
-						goto l605
+						goto l607
 					}
 					break
 				case 'f':
 					position++
 					if !matchString("rameset") {
-						goto l605
+						goto l607
 					}
 					break
 				case 'd':
 					position++ // matchString(`dt`)
 					if !matchChar('t') {
-						goto l605
+						goto l607
 					}
 					break
 				case 'u':
 					position++ // matchString(`ul`)
 					if !matchChar('l') {
-						goto l605
+						goto l607
 					}
 					break
 				case 'p':
 					position++
 					if !matchString("re") {
-						goto l605
+						goto l607
 					}
 					break
 				case 'o':
 					position++ // matchString(`ol`)
 					if !matchChar('l') {
-						goto l605
+						goto l607
 					}
 					break
 				case 'n':
 					position++
 					if !matchString("oscript") {
-						goto l605
+						goto l607
 					}
 					break
 				case 'm':
 					position++
 					if !matchString("enu") {
-						goto l605
+						goto l607
 					}
 					break
 				case 'i':
 					position++
 					if !matchString("sindex") {
-						goto l605
+						goto l607
 					}
 					break
 				case 'h':
 					position++ // matchString(`hr`)
 					if !matchChar('r') {
-						goto l605
+						goto l607
 					}
 					break
 				case 'c':
 					position++
 					if !matchString("enter") {
-						goto l605
+						goto l607
 					}
 					break
 				case 'b':
 					position++
 					if !matchString("lockquote") {
-						goto l605
+						goto l607
 					}
 					break
 				case 'a':
 					position++
 					if !matchString("ddress") {
-						goto l605
+						goto l607
 					}
 					break
 				default:
-					goto l605
+					goto l607
 				}
 			}
-		l606:
+		l608:
 			return true
-		l605:
+		l607:
 			return false
 		},
 		/* 134 StyleOpen <- ('<' Spnl ((&[S] 'STYLE') | (&[s] 'style')) Spnl HtmlAttribute* '>') */
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l648
+				goto l650
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l648
+				goto l650
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l648
+					goto l650
 				}
 				switch p.Buffer[position] {
 				case 'S':
 					position++
 					if !matchString("TYLE") {
-						goto l648
+						goto l650
 					}
 					break
 				case 's':
 					position++
 					if !matchString("tyle") {
-						goto l648
+						goto l650
 					}
 					break
 				default:
-					goto l648
+					goto l650
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l648
+				goto l650
 			}
-		l650:
+		l652:
 			if !p.rules[ruleHtmlAttribute]() {
-				goto l651
+				goto l653
 			}
-			goto l650
-		l651:
+			goto l652
+		l653:
 			if !matchChar('>') {
-				goto l648
+				goto l650
 			}
 			return true
-		l648:
+		l650:
 			position = position0
 			return false
 		},
@@ -7515,68 +7545,39 @@ func (p *yyParser) Init() {
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l652
+				goto l654
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l652
+				goto l654
 			}
 			if !matchChar('/') {
-				goto l652
+				goto l654
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l652
+					goto l654
 				}
 				switch p.Buffer[position] {
 				case 'S':
 					position++
 					if !matchString("TYLE") {
-						goto l652
+						goto l654
 					}
 					break
 				case 's':
 					position++
 					if !matchString("tyle") {
-						goto l652
+						goto l654
 					}
 					break
 				default:
-					goto l652
+					goto l654
 				}
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l652
-			}
-			if !matchChar('>') {
-				goto l652
-			}
-			return true
-		l652:
-			position = position0
-			return false
-		},
-		/* 136 InStyleTags <- (StyleOpen (!StyleClose .)* StyleClose) */
-		func() bool {
-			position0 := position
-			if !p.rules[ruleStyleOpen]() {
 				goto l654
 			}
-		l655:
-			{
-				position656 := position
-				if !p.rules[ruleStyleClose]() {
-					goto l657
-				}
-				goto l656
-			l657:
-				if !matchDot() {
-					goto l656
-				}
-				goto l655
-			l656:
-				position = position656
-			}
-			if !p.rules[ruleStyleClose]() {
+			if !matchChar('>') {
 				goto l654
 			}
 			return true
@@ -7584,10 +7585,39 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
+		/* 136 InStyleTags <- (StyleOpen (!StyleClose .)* StyleClose) */
+		func() bool {
+			position0 := position
+			if !p.rules[ruleStyleOpen]() {
+				goto l656
+			}
+		l657:
+			{
+				position658 := position
+				if !p.rules[ruleStyleClose]() {
+					goto l659
+				}
+				goto l658
+			l659:
+				if !matchDot() {
+					goto l658
+				}
+				goto l657
+			l658:
+				position = position658
+			}
+			if !p.rules[ruleStyleClose]() {
+				goto l656
+			}
+			return true
+		l656:
+			position = position0
+			return false
+		},
 		/* 137 StyleBlock <- (< InStyleTags > BlankLine* {   if p.extension.FilterStyles {
-                        yy = mk_list(LIST, nil)
+                        yy = p.mkList(LIST, nil)
                     } else {
-                        yy = mk_str(yytext)
+                        yy = p.mkString(yytext)
                         yy.key = HTMLBLOCK
                     }
                 }) */
@@ -7595,818 +7625,775 @@ func (p *yyParser) Init() {
 			position0 := position
 			begin = position
 			if !p.rules[ruleInStyleTags]() {
-				goto l658
-			}
-			end = position
-		l659:
-			if !p.rules[ruleBlankLine]() {
 				goto l660
 			}
-			goto l659
-		l660:
+			end = position
+		l661:
+			if !p.rules[ruleBlankLine]() {
+				goto l662
+			}
+			goto l661
+		l662:
 			do(42)
 			return true
-		l658:
+		l660:
 			position = position0
 			return false
 		},
-		/* 138 Inlines <- (StartList ((!Endline Inline { a = cons(yy, a) }) / (Endline &Inline { a = cons(c, a) }))+ Endline? { yy = mk_list(LIST, a) }) */
+		/* 138 Inlines <- (StartList ((!Endline Inline { a = cons(yy, a) }) / (Endline &Inline { a = cons(c, a) }))+ Endline? { yy = p.mkList(LIST, a) }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 2)
 			if !p.rules[ruleStartList]() {
-				goto l661
+				goto l663
 			}
-			doarg(yySet, -1)
+			doarg(yySet, -2)
 			{
-				position664 := position
+				position666 := position
 				if !p.rules[ruleEndline]() {
-					goto l666
+					goto l668
 				}
-				goto l665
-			l666:
+				goto l667
+			l668:
 				if !p.rules[ruleInline]() {
-					goto l665
+					goto l667
 				}
 				do(43)
-				goto l664
-			l665:
-				position = position664
+				goto l666
+			l667:
+				position = position666
 				if !p.rules[ruleEndline]() {
-					goto l661
+					goto l663
 				}
-				doarg(yySet, -2)
+				doarg(yySet, -1)
 				{
-					position667 := position
+					position669 := position
 					if !p.rules[ruleInline]() {
-						goto l661
+						goto l663
 					}
-					position = position667
+					position = position669
 				}
 				do(44)
 			}
+		l666:
 		l664:
-		l662:
 			{
-				position663, thunkPosition663 := position, thunkPosition
+				position665, thunkPosition665 := position, thunkPosition
 				{
-					position668 := position
+					position670 := position
 					if !p.rules[ruleEndline]() {
-						goto l670
+						goto l672
 					}
-					goto l669
-				l670:
+					goto l671
+				l672:
 					if !p.rules[ruleInline]() {
-						goto l669
+						goto l671
 					}
 					do(43)
-					goto l668
-				l669:
-					position = position668
+					goto l670
+				l671:
+					position = position670
 					if !p.rules[ruleEndline]() {
-						goto l663
+						goto l665
 					}
-					doarg(yySet, -2)
+					doarg(yySet, -1)
 					{
-						position671 := position
+						position673 := position
 						if !p.rules[ruleInline]() {
-							goto l663
+							goto l665
 						}
-						position = position671
+						position = position673
 					}
 					do(44)
 				}
-			l668:
-				goto l662
-			l663:
-				position, thunkPosition = position663, thunkPosition663
+			l670:
+				goto l664
+			l665:
+				position, thunkPosition = position665, thunkPosition665
 			}
 			if !p.rules[ruleEndline]() {
-				goto l672
+				goto l674
 			}
-		l672:
+		l674:
 			do(45)
 			doarg(yyPop, 2)
 			return true
-		l661:
+		l663:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
 		/* 139 Inline <- (Str / Endline / UlOrStarLine / Space / Strong / Emph / Image / Link / NoteReference / InlineNote / Code / RawHtml / Entity / EscapedChar / Smart / Symbol) */
 		func() bool {
 			if !p.rules[ruleStr]() {
-				goto l676
-			}
-			goto l675
-		l676:
-			if !p.rules[ruleEndline]() {
-				goto l677
-			}
-			goto l675
-		l677:
-			if !p.rules[ruleUlOrStarLine]() {
 				goto l678
 			}
-			goto l675
+			goto l677
 		l678:
-			if !p.rules[ruleSpace]() {
+			if !p.rules[ruleEndline]() {
 				goto l679
 			}
-			goto l675
+			goto l677
 		l679:
-			if !p.rules[ruleStrong]() {
+			if !p.rules[ruleUlOrStarLine]() {
 				goto l680
 			}
-			goto l675
+			goto l677
 		l680:
-			if !p.rules[ruleEmph]() {
+			if !p.rules[ruleSpace]() {
 				goto l681
 			}
-			goto l675
+			goto l677
 		l681:
-			if !p.rules[ruleImage]() {
+			if !p.rules[ruleStrong]() {
 				goto l682
 			}
-			goto l675
+			goto l677
 		l682:
-			if !p.rules[ruleLink]() {
+			if !p.rules[ruleEmph]() {
 				goto l683
 			}
-			goto l675
+			goto l677
 		l683:
-			if !p.rules[ruleNoteReference]() {
+			if !p.rules[ruleImage]() {
 				goto l684
 			}
-			goto l675
+			goto l677
 		l684:
-			if !p.rules[ruleInlineNote]() {
+			if !p.rules[ruleLink]() {
 				goto l685
 			}
-			goto l675
+			goto l677
 		l685:
-			if !p.rules[ruleCode]() {
+			if !p.rules[ruleNoteReference]() {
 				goto l686
 			}
-			goto l675
+			goto l677
 		l686:
-			if !p.rules[ruleRawHtml]() {
+			if !p.rules[ruleInlineNote]() {
 				goto l687
 			}
-			goto l675
+			goto l677
 		l687:
-			if !p.rules[ruleEntity]() {
+			if !p.rules[ruleCode]() {
 				goto l688
 			}
-			goto l675
+			goto l677
 		l688:
-			if !p.rules[ruleEscapedChar]() {
+			if !p.rules[ruleRawHtml]() {
 				goto l689
 			}
-			goto l675
+			goto l677
 		l689:
-			if !p.rules[ruleSmart]() {
+			if !p.rules[ruleEntity]() {
 				goto l690
 			}
-			goto l675
+			goto l677
 		l690:
-			if !p.rules[ruleSymbol]() {
-				goto l674
+			if !p.rules[ruleEscapedChar]() {
+				goto l691
 			}
-		l675:
+			goto l677
+		l691:
+			if !p.rules[ruleSmart]() {
+				goto l692
+			}
+			goto l677
+		l692:
+			if !p.rules[ruleSymbol]() {
+				goto l676
+			}
+		l677:
 			return true
-		l674:
+		l676:
 			return false
 		},
-		/* 140 Space <- (Spacechar+ { yy = mk_str(" ")
+		/* 140 Space <- (Spacechar+ { yy = p.mkString(" ")
           yy.key = SPACE }) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleSpacechar]() {
-				goto l691
-			}
-		l692:
-			if !p.rules[ruleSpacechar]() {
 				goto l693
 			}
-			goto l692
-		l693:
+		l694:
+			if !p.rules[ruleSpacechar]() {
+				goto l695
+			}
+			goto l694
+		l695:
 			do(46)
 			return true
-		l691:
+		l693:
 			position = position0
 			return false
 		},
-		/* 141 Str <- (< NormalChar (NormalChar / ('_'+ &Alphanumeric))* > { yy = mk_str(yytext) }) */
+		/* 141 Str <- (StartList < NormalChar+ > { a = cons(p.mkString(yytext), a) } (StrChunk { a = cons(yy, a) })* { if a.next == nil { yy = a; } else { yy = p.mkList(LIST, a) } }) */
 		func() bool {
-			position0 := position
+			position0, thunkPosition0 := position, thunkPosition
+			doarg(yyPush, 1)
+			if !p.rules[ruleStartList]() {
+				goto l696
+			}
+			doarg(yySet, -1)
 			begin = position
 			if !p.rules[ruleNormalChar]() {
-				goto l694
+				goto l696
 			}
-		l695:
-			{
-				position696 := position
-				if !p.rules[ruleNormalChar]() {
-					goto l698
-				}
-				goto l697
-			l698:
-				if !matchChar('_') {
-					goto l696
-				}
-			l699:
-				if !matchChar('_') {
-					goto l700
-				}
-				goto l699
-			l700:
-				{
-					position701 := position
-					if !p.rules[ruleAlphanumeric]() {
-						goto l696
-					}
-					position = position701
-				}
-			l697:
-				goto l695
-			l696:
-				position = position696
+		l697:
+			if !p.rules[ruleNormalChar]() {
+				goto l698
 			}
+			goto l697
+		l698:
 			end = position
 			do(47)
+		l699:
+			{
+				position700, thunkPosition700 := position, thunkPosition
+				if !p.rules[ruleStrChunk]() {
+					goto l700
+				}
+				do(48)
+				goto l699
+			l700:
+				position, thunkPosition = position700, thunkPosition700
+			}
+			do(49)
+			doarg(yyPop, 1)
 			return true
-		l694:
+		l696:
+			position, thunkPosition = position0, thunkPosition0
+			return false
+		},
+		/* 142 StrChunk <- ((< (NormalChar / ('_'+ &Alphanumeric))+ > { yy = p.mkString(yytext) }) / AposChunk) */
+		func() bool {
+			position0 := position
+			{
+				position702 := position
+				begin = position
+				if !p.rules[ruleNormalChar]() {
+					goto l707
+				}
+				goto l706
+			l707:
+				if !matchChar('_') {
+					goto l703
+				}
+			l708:
+				if !matchChar('_') {
+					goto l709
+				}
+				goto l708
+			l709:
+				{
+					position710 := position
+					if !p.rules[ruleAlphanumeric]() {
+						goto l703
+					}
+					position = position710
+				}
+			l706:
+			l704:
+				{
+					position705 := position
+					if !p.rules[ruleNormalChar]() {
+						goto l712
+					}
+					goto l711
+				l712:
+					if !matchChar('_') {
+						goto l705
+					}
+				l713:
+					if !matchChar('_') {
+						goto l714
+					}
+					goto l713
+				l714:
+					{
+						position715 := position
+						if !p.rules[ruleAlphanumeric]() {
+							goto l705
+						}
+						position = position715
+					}
+				l711:
+					goto l704
+				l705:
+					position = position705
+				}
+				end = position
+				do(50)
+				goto l702
+			l703:
+				position = position702
+				if !p.rules[ruleAposChunk]() {
+					goto l701
+				}
+			}
+		l702:
+			return true
+		l701:
 			position = position0
 			return false
 		},
-		/* 142 EscapedChar <- ('\\' !Newline < [-\\`|*_{}[\]()#+.!><] > { yy = mk_str(yytext) }) */
+		/* 143 AposChunk <- (&{p.extension.Smart} '\'' &Alphanumeric { yy = p.mkElem(APOSTROPHE) }) */
+		func() bool {
+			position0 := position
+			if !(p.extension.Smart) {
+				goto l716
+			}
+			if !matchChar('\'') {
+				goto l716
+			}
+			{
+				position717 := position
+				if !p.rules[ruleAlphanumeric]() {
+					goto l716
+				}
+				position = position717
+			}
+			do(51)
+			return true
+		l716:
+			position = position0
+			return false
+		},
+		/* 144 EscapedChar <- ('\\' !Newline < [-\\`|*_{}[\]()#+.!><] > { yy = p.mkString(yytext) }) */
 		func() bool {
 			position0 := position
 			if !matchChar('\\') {
-				goto l702
+				goto l718
 			}
 			if !p.rules[ruleNewline]() {
-				goto l703
+				goto l719
 			}
-			goto l702
-		l703:
+			goto l718
+		l719:
 			begin = position
 			if !matchClass(1) {
-				goto l702
+				goto l718
 			}
 			end = position
-			do(48)
+			do(52)
 			return true
-		l702:
+		l718:
 			position = position0
 			return false
 		},
-		/* 143 Entity <- ((HexEntity / DecEntity / CharEntity) { yy = mk_str(yytext); yy.key = HTML }) */
+		/* 145 Entity <- ((HexEntity / DecEntity / CharEntity) { yy = p.mkString(yytext); yy.key = HTML }) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleHexEntity]() {
-				goto l706
+				goto l722
 			}
-			goto l705
-		l706:
+			goto l721
+		l722:
 			if !p.rules[ruleDecEntity]() {
-				goto l707
+				goto l723
 			}
-			goto l705
-		l707:
+			goto l721
+		l723:
 			if !p.rules[ruleCharEntity]() {
-				goto l704
+				goto l720
 			}
-		l705:
-			do(49)
+		l721:
+			do(53)
 			return true
-		l704:
+		l720:
 			position = position0
 			return false
 		},
-		/* 144 Endline <- (LineBreak / TerminalEndline / NormalEndline) */
+		/* 146 Endline <- (LineBreak / TerminalEndline / NormalEndline) */
 		func() bool {
 			if !p.rules[ruleLineBreak]() {
-				goto l710
+				goto l726
 			}
-			goto l709
-		l710:
+			goto l725
+		l726:
 			if !p.rules[ruleTerminalEndline]() {
-				goto l711
+				goto l727
 			}
-			goto l709
-		l711:
+			goto l725
+		l727:
 			if !p.rules[ruleNormalEndline]() {
-				goto l708
+				goto l724
 			}
-		l709:
+		l725:
 			return true
-		l708:
+		l724:
 			return false
 		},
-		/* 145 NormalEndline <- (Sp Newline !BlankLine !'>' !AtxStart !(Line ((&[\-] ('---' '-'*)) | (&[=] ('===' '='*))) Newline) { yy = mk_str("\n")
+		/* 147 NormalEndline <- (Sp Newline !BlankLine !'>' !AtxStart !(Line ((&[\-] ('---' '-'*)) | (&[=] ('===' '='*))) Newline) { yy = p.mkString("\n")
                     yy.key = SPACE }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			if !p.rules[ruleSp]() {
-				goto l712
+				goto l728
 			}
 			if !p.rules[ruleNewline]() {
-				goto l712
+				goto l728
 			}
 			if !p.rules[ruleBlankLine]() {
-				goto l713
+				goto l729
 			}
-			goto l712
-		l713:
+			goto l728
+		l729:
 			if peekChar('>') {
-				goto l712
+				goto l728
 			}
 			if !p.rules[ruleAtxStart]() {
-				goto l714
+				goto l730
 			}
-			goto l712
-		l714:
+			goto l728
+		l730:
 			{
-				position715, thunkPosition715 := position, thunkPosition
+				position731, thunkPosition731 := position, thunkPosition
 				if !p.rules[ruleLine]() {
-					goto l715
+					goto l731
 				}
 				{
 					if position == len(p.Buffer) {
-						goto l715
+						goto l731
 					}
 					switch p.Buffer[position] {
 					case '-':
 						position++
 						if !matchString("--") {
-							goto l715
+							goto l731
 						}
-					l717:
+					l733:
 						if !matchChar('-') {
-							goto l718
+							goto l734
 						}
-						goto l717
-					l718:
+						goto l733
+					l734:
 						break
 					case '=':
 						position++
 						if !matchString("==") {
-							goto l715
+							goto l731
 						}
-					l719:
+					l735:
 						if !matchChar('=') {
-							goto l720
+							goto l736
 						}
-						goto l719
-					l720:
+						goto l735
+					l736:
 						break
 					default:
-						goto l715
+						goto l731
 					}
 				}
 				if !p.rules[ruleNewline]() {
-					goto l715
+					goto l731
 				}
-				goto l712
-			l715:
-				position, thunkPosition = position715, thunkPosition715
+				goto l728
+			l731:
+				position, thunkPosition = position731, thunkPosition731
 			}
-			do(50)
+			do(54)
 			return true
-		l712:
+		l728:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 146 TerminalEndline <- (Sp Newline !. { yy = nil }) */
+		/* 148 TerminalEndline <- (Sp Newline !. { yy = nil }) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleSp]() {
-				goto l721
+				goto l737
 			}
 			if !p.rules[ruleNewline]() {
-				goto l721
+				goto l737
 			}
 			if (position < len(p.Buffer)) {
-				goto l721
+				goto l737
 			}
-			do(51)
+			do(55)
 			return true
-		l721:
+		l737:
 			position = position0
 			return false
 		},
-		/* 147 LineBreak <- ('  ' NormalEndline { yy = mk_element(LINEBREAK) }) */
+		/* 149 LineBreak <- ('  ' NormalEndline { yy = p.mkElem(LINEBREAK) }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			if !matchString("  ") {
-				goto l722
+				goto l738
 			}
 			if !p.rules[ruleNormalEndline]() {
-				goto l722
+				goto l738
 			}
-			do(52)
+			do(56)
 			return true
-		l722:
+		l738:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 148 Symbol <- (< SpecialChar > { yy = mk_str(yytext) }) */
+		/* 150 Symbol <- (< SpecialChar > { yy = p.mkString(yytext) }) */
 		func() bool {
 			position0 := position
 			begin = position
 			if !p.rules[ruleSpecialChar]() {
-				goto l723
+				goto l739
 			}
 			end = position
-			do(53)
+			do(57)
 			return true
-		l723:
+		l739:
 			position = position0
 			return false
 		},
-		/* 149 UlOrStarLine <- ((UlLine / StarLine) { yy = mk_str(yytext) }) */
+		/* 151 UlOrStarLine <- ((UlLine / StarLine) { yy = p.mkString(yytext) }) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleUlLine]() {
-				goto l726
+				goto l742
 			}
-			goto l725
-		l726:
+			goto l741
+		l742:
 			if !p.rules[ruleStarLine]() {
-				goto l724
+				goto l740
 			}
-		l725:
-			do(54)
+		l741:
+			do(58)
 			return true
-		l724:
+		l740:
 			position = position0
 			return false
 		},
-		/* 150 StarLine <- ((&[*] (< '****' '*'* >)) | (&[\t ] (< Spacechar '*'+ &Spacechar >))) */
+		/* 152 StarLine <- ((&[*] (< '****' '*'* >)) | (&[\t ] (< Spacechar '*'+ &Spacechar >))) */
 		func() bool {
 			position0 := position
 			{
 				if position == len(p.Buffer) {
-					goto l727
+					goto l743
 				}
 				switch p.Buffer[position] {
 				case '*':
 					begin = position
 					if !matchString("****") {
-						goto l727
+						goto l743
 					}
-				l729:
+				l745:
 					if !matchChar('*') {
-						goto l730
+						goto l746
 					}
-					goto l729
-				l730:
+					goto l745
+				l746:
 					end = position
 					break
 				case '\t', ' ':
 					begin = position
 					if !p.rules[ruleSpacechar]() {
-						goto l727
+						goto l743
 					}
 					if !matchChar('*') {
-						goto l727
+						goto l743
 					}
-				l731:
+				l747:
 					if !matchChar('*') {
-						goto l732
+						goto l748
 					}
-					goto l731
-				l732:
+					goto l747
+				l748:
 					{
-						position733 := position
+						position749 := position
 						if !p.rules[ruleSpacechar]() {
-							goto l727
+							goto l743
 						}
-						position = position733
+						position = position749
 					}
 					end = position
 					break
 				default:
-					goto l727
+					goto l743
 				}
 			}
-			return true
-		l727:
-			position = position0
-			return false
-		},
-		/* 151 UlLine <- ((&[_] (< '____' '_'* >)) | (&[\t ] (< Spacechar '_'+ &Spacechar >))) */
-		func() bool {
-			position0 := position
-			{
-				if position == len(p.Buffer) {
-					goto l734
-				}
-				switch p.Buffer[position] {
-				case '_':
-					begin = position
-					if !matchString("____") {
-						goto l734
-					}
-				l736:
-					if !matchChar('_') {
-						goto l737
-					}
-					goto l736
-				l737:
-					end = position
-					break
-				case '\t', ' ':
-					begin = position
-					if !p.rules[ruleSpacechar]() {
-						goto l734
-					}
-					if !matchChar('_') {
-						goto l734
-					}
-				l738:
-					if !matchChar('_') {
-						goto l739
-					}
-					goto l738
-				l739:
-					{
-						position740 := position
-						if !p.rules[ruleSpacechar]() {
-							goto l734
-						}
-						position = position740
-					}
-					end = position
-					break
-				default:
-					goto l734
-				}
-			}
-			return true
-		l734:
-			position = position0
-			return false
-		},
-		/* 152 Emph <- ((&[_] EmphUl) | (&[*] EmphStar)) */
-		func() bool {
-			{
-				if position == len(p.Buffer) {
-					goto l741
-				}
-				switch p.Buffer[position] {
-				case '_':
-					if !p.rules[ruleEmphUl]() {
-						goto l741
-					}
-					break
-				case '*':
-					if !p.rules[ruleEmphStar]() {
-						goto l741
-					}
-					break
-				default:
-					goto l741
-				}
-			}
-			return true
-		l741:
-			return false
-		},
-		/* 153 OneStarOpen <- (!StarLine '*' !Spacechar !Newline) */
-		func() bool {
-			position0 := position
-			if !p.rules[ruleStarLine]() {
-				goto l744
-			}
-			goto l743
-		l744:
-			if !matchChar('*') {
-				goto l743
-			}
-			if !p.rules[ruleSpacechar]() {
-				goto l745
-			}
-			goto l743
-		l745:
-			if !p.rules[ruleNewline]() {
-				goto l746
-			}
-			goto l743
-		l746:
 			return true
 		l743:
 			position = position0
 			return false
 		},
-		/* 154 OneStarClose <- (!Spacechar !Newline Inline !StrongStar '*' { yy = a }) */
-		func() bool {
-			position0, thunkPosition0 := position, thunkPosition
-			doarg(yyPush, 1)
-			if !p.rules[ruleSpacechar]() {
-				goto l748
-			}
-			goto l747
-		l748:
-			if !p.rules[ruleNewline]() {
-				goto l749
-			}
-			goto l747
-		l749:
-			if !p.rules[ruleInline]() {
-				goto l747
-			}
-			doarg(yySet, -1)
-			if !p.rules[ruleStrongStar]() {
-				goto l750
-			}
-			goto l747
-		l750:
-			if !matchChar('*') {
-				goto l747
-			}
-			do(55)
-			doarg(yyPop, 1)
-			return true
-		l747:
-			position, thunkPosition = position0, thunkPosition0
-			return false
-		},
-		/* 155 EmphStar <- (OneStarOpen StartList (!OneStarClose Inline { a = cons(yy, a) })* OneStarClose { a = cons(yy, a) } { yy = mk_list(EMPH, a) }) */
-		func() bool {
-			position0, thunkPosition0 := position, thunkPosition
-			doarg(yyPush, 1)
-			if !p.rules[ruleOneStarOpen]() {
-				goto l751
-			}
-			if !p.rules[ruleStartList]() {
-				goto l751
-			}
-			doarg(yySet, -1)
-		l752:
-			{
-				position753, thunkPosition753 := position, thunkPosition
-				if !p.rules[ruleOneStarClose]() {
-					goto l754
-				}
-				goto l753
-			l754:
-				if !p.rules[ruleInline]() {
-					goto l753
-				}
-				do(56)
-				goto l752
-			l753:
-				position, thunkPosition = position753, thunkPosition753
-			}
-			if !p.rules[ruleOneStarClose]() {
-				goto l751
-			}
-			do(57)
-			do(58)
-			doarg(yyPop, 1)
-			return true
-		l751:
-			position, thunkPosition = position0, thunkPosition0
-			return false
-		},
-		/* 156 OneUlOpen <- (!UlLine '_' !Spacechar !Newline) */
+		/* 153 UlLine <- ((&[_] (< '____' '_'* >)) | (&[\t ] (< Spacechar '_'+ &Spacechar >))) */
 		func() bool {
 			position0 := position
-			if !p.rules[ruleUlLine]() {
-				goto l756
+			{
+				if position == len(p.Buffer) {
+					goto l750
+				}
+				switch p.Buffer[position] {
+				case '_':
+					begin = position
+					if !matchString("____") {
+						goto l750
+					}
+				l752:
+					if !matchChar('_') {
+						goto l753
+					}
+					goto l752
+				l753:
+					end = position
+					break
+				case '\t', ' ':
+					begin = position
+					if !p.rules[ruleSpacechar]() {
+						goto l750
+					}
+					if !matchChar('_') {
+						goto l750
+					}
+				l754:
+					if !matchChar('_') {
+						goto l755
+					}
+					goto l754
+				l755:
+					{
+						position756 := position
+						if !p.rules[ruleSpacechar]() {
+							goto l750
+						}
+						position = position756
+					}
+					end = position
+					break
+				default:
+					goto l750
+				}
 			}
-			goto l755
-		l756:
-			if !matchChar('_') {
-				goto l755
-			}
-			if !p.rules[ruleSpacechar]() {
-				goto l757
-			}
-			goto l755
-		l757:
-			if !p.rules[ruleNewline]() {
-				goto l758
-			}
-			goto l755
-		l758:
 			return true
-		l755:
+		l750:
 			position = position0
 			return false
 		},
-		/* 157 OneUlClose <- (!Spacechar !Newline Inline !StrongUl '_' !Alphanumeric { yy = a }) */
+		/* 154 Emph <- ((&[_] EmphUl) | (&[*] EmphStar)) */
 		func() bool {
-			position0, thunkPosition0 := position, thunkPosition
-			doarg(yyPush, 1)
-			if !p.rules[ruleSpacechar]() {
+			{
+				if position == len(p.Buffer) {
+					goto l757
+				}
+				switch p.Buffer[position] {
+				case '_':
+					if !p.rules[ruleEmphUl]() {
+						goto l757
+					}
+					break
+				case '*':
+					if !p.rules[ruleEmphStar]() {
+						goto l757
+					}
+					break
+				default:
+					goto l757
+				}
+			}
+			return true
+		l757:
+			return false
+		},
+		/* 155 OneStarOpen <- (!StarLine '*' !Spacechar !Newline) */
+		func() bool {
+			position0 := position
+			if !p.rules[ruleStarLine]() {
 				goto l760
 			}
 			goto l759
 		l760:
-			if !p.rules[ruleNewline]() {
+			if !matchChar('*') {
+				goto l759
+			}
+			if !p.rules[ruleSpacechar]() {
 				goto l761
 			}
 			goto l759
 		l761:
-			if !p.rules[ruleInline]() {
-				goto l759
-			}
-			doarg(yySet, -1)
-			if !p.rules[ruleStrongUl]() {
+			if !p.rules[ruleNewline]() {
 				goto l762
 			}
 			goto l759
 		l762:
-			if !matchChar('_') {
-				goto l759
-			}
-			if !p.rules[ruleAlphanumeric]() {
-				goto l763
-			}
-			goto l759
-		l763:
-			do(59)
-			doarg(yyPop, 1)
 			return true
 		l759:
-			position, thunkPosition = position0, thunkPosition0
+			position = position0
 			return false
 		},
-		/* 158 EmphUl <- (OneUlOpen StartList (!OneUlClose Inline { a = cons(yy, a) })* OneUlClose { a = cons(yy, a) } { yy = mk_list(EMPH, a) }) */
+		/* 156 OneStarClose <- (!Spacechar !Newline Inline '*' { yy = a }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
-			if !p.rules[ruleOneUlOpen]() {
+			if !p.rules[ruleSpacechar]() {
 				goto l764
 			}
-			if !p.rules[ruleStartList]() {
-				goto l764
+			goto l763
+		l764:
+			if !p.rules[ruleNewline]() {
+				goto l765
+			}
+			goto l763
+		l765:
+			if !p.rules[ruleInline]() {
+				goto l763
 			}
 			doarg(yySet, -1)
-		l765:
-			{
-				position766, thunkPosition766 := position, thunkPosition
-				if !p.rules[ruleOneUlClose]() {
-					goto l767
-				}
+			if !matchChar('*') {
+				goto l763
+			}
+			do(59)
+			doarg(yyPop, 1)
+			return true
+		l763:
+			position, thunkPosition = position0, thunkPosition0
+			return false
+		},
+		/* 157 EmphStar <- (OneStarOpen StartList (!OneStarClose Inline { a = cons(yy, a) })* OneStarClose { a = cons(yy, a) } { yy = p.mkList(EMPH, a) }) */
+		func() bool {
+			position0, thunkPosition0 := position, thunkPosition
+			doarg(yyPush, 1)
+			if !p.rules[ruleOneStarOpen]() {
 				goto l766
-			l767:
+			}
+			if !p.rules[ruleStartList]() {
+				goto l766
+			}
+			doarg(yySet, -1)
+		l767:
+			{
+				position768, thunkPosition768 := position, thunkPosition
+				if !p.rules[ruleOneStarClose]() {
+					goto l769
+				}
+				goto l768
+			l769:
 				if !p.rules[ruleInline]() {
-					goto l766
+					goto l768
 				}
 				do(60)
-				goto l765
-			l766:
-				position, thunkPosition = position766, thunkPosition766
+				goto l767
+			l768:
+				position, thunkPosition = position768, thunkPosition768
 			}
-			if !p.rules[ruleOneUlClose]() {
-				goto l764
+			if !p.rules[ruleOneStarClose]() {
+				goto l766
 			}
 			do(61)
 			do(62)
 			doarg(yyPop, 1)
 			return true
-		l764:
+		l766:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 159 Strong <- ((&[_] StrongUl) | (&[*] StrongStar)) */
-		func() bool {
-			{
-				if position == len(p.Buffer) {
-					goto l768
-				}
-				switch p.Buffer[position] {
-				case '_':
-					if !p.rules[ruleStrongUl]() {
-						goto l768
-					}
-					break
-				case '*':
-					if !p.rules[ruleStrongStar]() {
-						goto l768
-					}
-					break
-				default:
-					goto l768
-				}
-			}
-			return true
-		l768:
-			return false
-		},
-		/* 160 TwoStarOpen <- (!StarLine '**' !Spacechar !Newline) */
+		/* 158 OneUlOpen <- (!UlLine '_' !Spacechar !Newline) */
 		func() bool {
 			position0 := position
-			if !p.rules[ruleStarLine]() {
+			if !p.rules[ruleUlLine]() {
 				goto l771
 			}
 			goto l770
 		l771:
-			if !matchString("**") {
+			if !matchChar('_') {
 				goto l770
 			}
 			if !p.rules[ruleSpacechar]() {
@@ -8424,7 +8411,7 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
-		/* 161 TwoStarClose <- (!Spacechar !Newline Inline '**' { yy = a }) */
+		/* 159 OneUlClose <- (!Spacechar !Newline Inline '_' !Alphanumeric { yy = a }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
@@ -8442,9 +8429,14 @@ func (p *yyParser) Init() {
 				goto l774
 			}
 			doarg(yySet, -1)
-			if !matchString("**") {
+			if !matchChar('_') {
 				goto l774
 			}
+			if !p.rules[ruleAlphanumeric]() {
+				goto l777
+			}
+			goto l774
+		l777:
 			do(63)
 			doarg(yyPop, 1)
 			return true
@@ -8452,212 +8444,329 @@ func (p *yyParser) Init() {
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 162 StrongStar <- (TwoStarOpen StartList (!TwoStarClose Inline { a = cons(yy, a) })* TwoStarClose { a = cons(yy, a) } { yy = mk_list(STRONG, a) }) */
+		/* 160 EmphUl <- (OneUlOpen StartList (!OneUlClose Inline { a = cons(yy, a) })* OneUlClose { a = cons(yy, a) } { yy = p.mkList(EMPH, a) }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
-			if !p.rules[ruleTwoStarOpen]() {
-				goto l777
+			if !p.rules[ruleOneUlOpen]() {
+				goto l778
 			}
 			if !p.rules[ruleStartList]() {
-				goto l777
+				goto l778
 			}
 			doarg(yySet, -1)
-		l778:
+		l779:
 			{
-				position779, thunkPosition779 := position, thunkPosition
-				if !p.rules[ruleTwoStarClose]() {
+				position780, thunkPosition780 := position, thunkPosition
+				if !p.rules[ruleOneUlClose]() {
+					goto l781
+				}
+				goto l780
+			l781:
+				if !p.rules[ruleInline]() {
 					goto l780
 				}
+				do(64)
 				goto l779
 			l780:
-				if !p.rules[ruleInline]() {
-					goto l779
-				}
-				do(64)
-				goto l778
-			l779:
-				position, thunkPosition = position779, thunkPosition779
+				position, thunkPosition = position780, thunkPosition780
 			}
-			if !p.rules[ruleTwoStarClose]() {
-				goto l777
+			if !p.rules[ruleOneUlClose]() {
+				goto l778
 			}
 			do(65)
 			do(66)
 			doarg(yyPop, 1)
 			return true
-		l777:
+		l778:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 163 TwoUlOpen <- (!UlLine '__' !Spacechar !Newline) */
+		/* 161 Strong <- ((&[_] StrongUl) | (&[*] StrongStar)) */
 		func() bool {
-			position0 := position
-			if !p.rules[ruleUlLine]() {
-				goto l782
+			{
+				if position == len(p.Buffer) {
+					goto l782
+				}
+				switch p.Buffer[position] {
+				case '_':
+					if !p.rules[ruleStrongUl]() {
+						goto l782
+					}
+					break
+				case '*':
+					if !p.rules[ruleStrongStar]() {
+						goto l782
+					}
+					break
+				default:
+					goto l782
+				}
 			}
-			goto l781
-		l782:
-			if !matchString("__") {
-				goto l781
-			}
-			if !p.rules[ruleSpacechar]() {
-				goto l783
-			}
-			goto l781
-		l783:
-			if !p.rules[ruleNewline]() {
-				goto l784
-			}
-			goto l781
-		l784:
 			return true
-		l781:
-			position = position0
+		l782:
 			return false
 		},
-		/* 164 TwoUlClose <- (!Spacechar !Newline Inline '__' !Alphanumeric { yy = a }) */
+		/* 162 TwoStarOpen <- (!StarLine '**' !Spacechar !Newline) */
 		func() bool {
-			position0, thunkPosition0 := position, thunkPosition
-			doarg(yyPush, 1)
+			position0 := position
+			if !p.rules[ruleStarLine]() {
+				goto l785
+			}
+			goto l784
+		l785:
+			if !matchString("**") {
+				goto l784
+			}
 			if !p.rules[ruleSpacechar]() {
 				goto l786
 			}
-			goto l785
+			goto l784
 		l786:
 			if !p.rules[ruleNewline]() {
 				goto l787
 			}
-			goto l785
+			goto l784
 		l787:
-			if !p.rules[ruleInline]() {
-				goto l785
-			}
-			doarg(yySet, -1)
-			if !matchString("__") {
-				goto l785
-			}
-			if !p.rules[ruleAlphanumeric]() {
-				goto l788
-			}
-			goto l785
-		l788:
-			do(67)
-			doarg(yyPop, 1)
 			return true
-		l785:
-			position, thunkPosition = position0, thunkPosition0
+		l784:
+			position = position0
 			return false
 		},
-		/* 165 StrongUl <- (TwoUlOpen StartList (!TwoUlClose Inline { a = cons(yy, a) })* TwoUlClose { a = cons(yy, a) } { yy = mk_list(STRONG, a) }) */
+		/* 163 TwoStarClose <- (!Spacechar !Newline Inline '**' { yy = a }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
-			if !p.rules[ruleTwoUlOpen]() {
+			if !p.rules[ruleSpacechar]() {
 				goto l789
 			}
-			if !p.rules[ruleStartList]() {
-				goto l789
+			goto l788
+		l789:
+			if !p.rules[ruleNewline]() {
+				goto l790
+			}
+			goto l788
+		l790:
+			if !p.rules[ruleInline]() {
+				goto l788
 			}
 			doarg(yySet, -1)
-		l790:
-			{
-				position791, thunkPosition791 := position, thunkPosition
-				if !p.rules[ruleTwoUlClose]() {
-					goto l792
-				}
+			if !matchString("**") {
+				goto l788
+			}
+			do(67)
+			doarg(yyPop, 1)
+			return true
+		l788:
+			position, thunkPosition = position0, thunkPosition0
+			return false
+		},
+		/* 164 StrongStar <- (TwoStarOpen StartList (!TwoStarClose Inline { a = cons(yy, a) })* TwoStarClose { a = cons(yy, a) } { yy = p.mkList(STRONG, a) }) */
+		func() bool {
+			position0, thunkPosition0 := position, thunkPosition
+			doarg(yyPush, 1)
+			if !p.rules[ruleTwoStarOpen]() {
 				goto l791
-			l792:
+			}
+			if !p.rules[ruleStartList]() {
+				goto l791
+			}
+			doarg(yySet, -1)
+		l792:
+			{
+				position793, thunkPosition793 := position, thunkPosition
+				if !p.rules[ruleTwoStarClose]() {
+					goto l794
+				}
+				goto l793
+			l794:
 				if !p.rules[ruleInline]() {
-					goto l791
+					goto l793
 				}
 				do(68)
-				goto l790
-			l791:
-				position, thunkPosition = position791, thunkPosition791
+				goto l792
+			l793:
+				position, thunkPosition = position793, thunkPosition793
 			}
-			if !p.rules[ruleTwoUlClose]() {
-				goto l789
+			if !p.rules[ruleTwoStarClose]() {
+				goto l791
 			}
 			do(69)
 			do(70)
 			doarg(yyPop, 1)
 			return true
-		l789:
+		l791:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 166 Image <- ('!' (ExplicitLink / ReferenceLink) {	if yy.key == LINK {
+		/* 165 TwoUlOpen <- (!UlLine '__' !Spacechar !Newline) */
+		func() bool {
+			position0 := position
+			if !p.rules[ruleUlLine]() {
+				goto l796
+			}
+			goto l795
+		l796:
+			if !matchString("__") {
+				goto l795
+			}
+			if !p.rules[ruleSpacechar]() {
+				goto l797
+			}
+			goto l795
+		l797:
+			if !p.rules[ruleNewline]() {
+				goto l798
+			}
+			goto l795
+		l798:
+			return true
+		l795:
+			position = position0
+			return false
+		},
+		/* 166 TwoUlClose <- (!Spacechar !Newline Inline '__' !Alphanumeric { yy = a }) */
+		func() bool {
+			position0, thunkPosition0 := position, thunkPosition
+			doarg(yyPush, 1)
+			if !p.rules[ruleSpacechar]() {
+				goto l800
+			}
+			goto l799
+		l800:
+			if !p.rules[ruleNewline]() {
+				goto l801
+			}
+			goto l799
+		l801:
+			if !p.rules[ruleInline]() {
+				goto l799
+			}
+			doarg(yySet, -1)
+			if !matchString("__") {
+				goto l799
+			}
+			if !p.rules[ruleAlphanumeric]() {
+				goto l802
+			}
+			goto l799
+		l802:
+			do(71)
+			doarg(yyPop, 1)
+			return true
+		l799:
+			position, thunkPosition = position0, thunkPosition0
+			return false
+		},
+		/* 167 StrongUl <- (TwoUlOpen StartList (!TwoUlClose Inline { a = cons(yy, a) })* TwoUlClose { a = cons(yy, a) } { yy = p.mkList(STRONG, a) }) */
+		func() bool {
+			position0, thunkPosition0 := position, thunkPosition
+			doarg(yyPush, 1)
+			if !p.rules[ruleTwoUlOpen]() {
+				goto l803
+			}
+			if !p.rules[ruleStartList]() {
+				goto l803
+			}
+			doarg(yySet, -1)
+		l804:
+			{
+				position805, thunkPosition805 := position, thunkPosition
+				if !p.rules[ruleTwoUlClose]() {
+					goto l806
+				}
+				goto l805
+			l806:
+				if !p.rules[ruleInline]() {
+					goto l805
+				}
+				do(72)
+				goto l804
+			l805:
+				position, thunkPosition = position805, thunkPosition805
+			}
+			if !p.rules[ruleTwoUlClose]() {
+				goto l803
+			}
+			do(73)
+			do(74)
+			doarg(yyPop, 1)
+			return true
+		l803:
+			position, thunkPosition = position0, thunkPosition0
+			return false
+		},
+		/* 168 Image <- ('!' (ExplicitLink / ReferenceLink) {	if yy.key == LINK {
 			yy.key = IMAGE
 		} else {
 			result := yy
-			yy.children = cons(mk_str("!"), result.children)
+			yy.children = cons(p.mkString("!"), result.children)
 		}
 	}) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			if !matchChar('!') {
-				goto l793
+				goto l807
 			}
 			if !p.rules[ruleExplicitLink]() {
-				goto l795
+				goto l809
 			}
-			goto l794
-		l795:
+			goto l808
+		l809:
 			if !p.rules[ruleReferenceLink]() {
-				goto l793
+				goto l807
 			}
-		l794:
-			do(71)
+		l808:
+			do(75)
 			return true
-		l793:
+		l807:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 167 Link <- (ExplicitLink / ReferenceLink / AutoLink) */
+		/* 169 Link <- (ExplicitLink / ReferenceLink / AutoLink) */
 		func() bool {
 			if !p.rules[ruleExplicitLink]() {
-				goto l798
+				goto l812
 			}
-			goto l797
-		l798:
+			goto l811
+		l812:
 			if !p.rules[ruleReferenceLink]() {
-				goto l799
+				goto l813
 			}
-			goto l797
-		l799:
+			goto l811
+		l813:
 			if !p.rules[ruleAutoLink]() {
-				goto l796
+				goto l810
 			}
-		l797:
+		l811:
 			return true
-		l796:
+		l810:
 			return false
 		},
-		/* 168 ReferenceLink <- (ReferenceLinkDouble / ReferenceLinkSingle) */
+		/* 170 ReferenceLink <- (ReferenceLinkDouble / ReferenceLinkSingle) */
 		func() bool {
 			if !p.rules[ruleReferenceLinkDouble]() {
-				goto l802
+				goto l816
 			}
-			goto l801
-		l802:
+			goto l815
+		l816:
 			if !p.rules[ruleReferenceLinkSingle]() {
-				goto l800
+				goto l814
 			}
-		l801:
+		l815:
 			return true
-		l800:
+		l814:
 			return false
 		},
-		/* 169 ReferenceLinkDouble <- (Label < Spnl > !'[]' Label {
+		/* 171 ReferenceLinkDouble <- (Label < Spnl > !'[]' Label {
                            if match, found := p.findReference(b.children); found {
-                               yy = mk_link(a.children, match.url, match.title);
+                               yy = p.mkLink(a.children, match.url, match.title);
                                a = nil
                                b = nil
                            } else {
-                               result := mk_element(LIST)
-                               result.children = cons(mk_str("["), cons(a, cons(mk_str("]"), cons(mk_str(yytext),
-                                                   cons(mk_str("["), cons(b, mk_str("]")))))))
+                               result := p.mkElem(LIST)
+                               result.children = cons(p.mkString("["), cons(a, cons(p.mkString("]"), cons(p.mkString(yytext),
+                                                   cons(p.mkString("["), cons(b, p.mkString("]")))))))
                                yy = result
                            }
                        }) */
@@ -8665,37 +8774,37 @@ func (p *yyParser) Init() {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 2)
 			if !p.rules[ruleLabel]() {
-				goto l803
+				goto l817
 			}
 			doarg(yySet, -1)
 			begin = position
 			if !p.rules[ruleSpnl]() {
-				goto l803
+				goto l817
 			}
 			end = position
 			if !matchString("[]") {
-				goto l804
+				goto l818
 			}
-			goto l803
-		l804:
+			goto l817
+		l818:
 			if !p.rules[ruleLabel]() {
-				goto l803
+				goto l817
 			}
 			doarg(yySet, -2)
-			do(72)
+			do(76)
 			doarg(yyPop, 2)
 			return true
-		l803:
+		l817:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 170 ReferenceLinkSingle <- (Label < (Spnl '[]')? > {
+		/* 172 ReferenceLinkSingle <- (Label < (Spnl '[]')? > {
                            if match, found := p.findReference(a.children); found {
-                               yy = mk_link(a.children, match.url, match.title)
+                               yy = p.mkLink(a.children, match.url, match.title)
                                a = nil
                            } else {
-                               result := mk_element(LIST)
-                               result.children = cons(mk_str("["), cons(a, cons(mk_str("]"), mk_str(yytext))));
+                               result := p.mkElem(LIST)
+                               result.children = cons(p.mkString("["), cons(a, cons(p.mkString("]"), p.mkString(yytext))));
                                yy = result
                            }
                        }) */
@@ -8703,32 +8812,32 @@ func (p *yyParser) Init() {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
 			if !p.rules[ruleLabel]() {
-				goto l805
+				goto l819
 			}
 			doarg(yySet, -1)
 			begin = position
 			{
-				position806 := position
+				position820 := position
 				if !p.rules[ruleSpnl]() {
-					goto l806
+					goto l820
 				}
 				if !matchString("[]") {
-					goto l806
+					goto l820
 				}
-				goto l807
-			l806:
-				position = position806
+				goto l821
+			l820:
+				position = position820
 			}
-		l807:
+		l821:
 			end = position
-			do(73)
+			do(77)
 			doarg(yyPop, 1)
 			return true
-		l805:
+		l819:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 171 ExplicitLink <- (Label Spnl '(' Sp Source Spnl Title Sp ')' { yy = mk_link(l.children, s.contents.str, t.contents.str)
+		/* 173 ExplicitLink <- (Label Spnl '(' Sp Source Spnl Title Sp ')' { yy = p.mkLink(l.children, s.contents.str, t.contents.str)
                   s = nil
                   t = nil
                   l = nil }) */
@@ -8736,386 +8845,390 @@ func (p *yyParser) Init() {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 3)
 			if !p.rules[ruleLabel]() {
-				goto l808
+				goto l822
+			}
+			doarg(yySet, -1)
+			if !p.rules[ruleSpnl]() {
+				goto l822
+			}
+			if !matchChar('(') {
+				goto l822
+			}
+			if !p.rules[ruleSp]() {
+				goto l822
+			}
+			if !p.rules[ruleSource]() {
+				goto l822
 			}
 			doarg(yySet, -2)
 			if !p.rules[ruleSpnl]() {
-				goto l808
-			}
-			if !matchChar('(') {
-				goto l808
-			}
-			if !p.rules[ruleSp]() {
-				goto l808
-			}
-			if !p.rules[ruleSource]() {
-				goto l808
-			}
-			doarg(yySet, -3)
-			if !p.rules[ruleSpnl]() {
-				goto l808
+				goto l822
 			}
 			if !p.rules[ruleTitle]() {
-				goto l808
+				goto l822
 			}
-			doarg(yySet, -1)
+			doarg(yySet, -3)
 			if !p.rules[ruleSp]() {
-				goto l808
+				goto l822
 			}
 			if !matchChar(')') {
-				goto l808
+				goto l822
 			}
-			do(74)
+			do(78)
 			doarg(yyPop, 3)
 			return true
-		l808:
+		l822:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 172 Source <- ((('<' < SourceContents > '>') / (< SourceContents >)) { yy = mk_str(yytext) }) */
+		/* 174 Source <- ((('<' < SourceContents > '>') / (< SourceContents >)) { yy = p.mkString(yytext) }) */
 		func() bool {
 			position0 := position
 			{
-				position810 := position
+				position824 := position
 				if !matchChar('<') {
-					goto l811
+					goto l825
 				}
 				begin = position
 				if !p.rules[ruleSourceContents]() {
-					goto l811
+					goto l825
 				}
 				end = position
 				if !matchChar('>') {
-					goto l811
+					goto l825
 				}
-				goto l810
-			l811:
-				position = position810
+				goto l824
+			l825:
+				position = position824
 				begin = position
 				if !p.rules[ruleSourceContents]() {
-					goto l809
+					goto l823
 				}
 				end = position
 			}
-		l810:
-			do(75)
-			return true
-		l809:
-			position = position0
-			return false
-		},
-		/* 173 SourceContents <- (((!'(' !')' !'>' Nonspacechar)+ / ('(' SourceContents ')'))* / '') */
-		func() bool {
-		l815:
-			{
-				position816 := position
-				if position == len(p.Buffer) {
-					goto l818
-				}
-				switch p.Buffer[position] {
-				case '(', ')', '>':
-					goto l818
-				default:
-					if !p.rules[ruleNonspacechar]() {
-						goto l818
-					}
-				}
-			l819:
-				if position == len(p.Buffer) {
-					goto l820
-				}
-				switch p.Buffer[position] {
-				case '(', ')', '>':
-					goto l820
-				default:
-					if !p.rules[ruleNonspacechar]() {
-						goto l820
-					}
-				}
-				goto l819
-			l820:
-				goto l817
-			l818:
-				if !matchChar('(') {
-					goto l816
-				}
-				if !p.rules[ruleSourceContents]() {
-					goto l816
-				}
-				if !matchChar(')') {
-					goto l816
-				}
-			l817:
-				goto l815
-			l816:
-				position = position816
-			}
-			goto l813
-		l813:
-			return true
-		},
-		/* 174 Title <- ((TitleSingle / TitleDouble / (< '' >)) { yy = mk_str(yytext) }) */
-		func() bool {
-			if !p.rules[ruleTitleSingle]() {
-				goto l823
-			}
-			goto l822
-		l823:
-			if !p.rules[ruleTitleDouble]() {
-				goto l824
-			}
-			goto l822
 		l824:
-			begin = position
-			end = position
-		l822:
-			do(76)
+			do(79)
 			return true
-		},
-		/* 175 TitleSingle <- ('\'' < (!('\'' Sp ((&[)] ')') | (&[\n\r] Newline))) .)* > '\'') */
-		func() bool {
-			position0 := position
-			if !matchChar('\'') {
-				goto l825
-			}
-			begin = position
-		l826:
-			{
-				position827 := position
-				{
-					position828 := position
-					if !matchChar('\'') {
-						goto l828
-					}
-					if !p.rules[ruleSp]() {
-						goto l828
-					}
-					{
-						if position == len(p.Buffer) {
-							goto l828
-						}
-						switch p.Buffer[position] {
-						case ')':
-							position++ // matchChar
-							break
-						case '\n', '\r':
-							if !p.rules[ruleNewline]() {
-								goto l828
-							}
-							break
-						default:
-							goto l828
-						}
-					}
-					goto l827
-				l828:
-					position = position828
-				}
-				if !matchDot() {
-					goto l827
-				}
-				goto l826
-			l827:
-				position = position827
-			}
-			end = position
-			if !matchChar('\'') {
-				goto l825
-			}
-			return true
-		l825:
+		l823:
 			position = position0
 			return false
 		},
-		/* 176 TitleDouble <- ('"' < (!('"' Sp ((&[)] ')') | (&[\n\r] Newline))) .)* > '"') */
+		/* 175 SourceContents <- (((!'(' !')' !'>' Nonspacechar)+ / ('(' SourceContents ')'))* / '') */
 		func() bool {
-			position0 := position
-			if !matchChar('"') {
-				goto l830
-			}
-			begin = position
-		l831:
+		l829:
 			{
-				position832 := position
-				{
-					position833 := position
-					if !matchChar('"') {
-						goto l833
-					}
-					if !p.rules[ruleSp]() {
-						goto l833
-					}
-					{
-						if position == len(p.Buffer) {
-							goto l833
-						}
-						switch p.Buffer[position] {
-						case ')':
-							position++ // matchChar
-							break
-						case '\n', '\r':
-							if !p.rules[ruleNewline]() {
-								goto l833
-							}
-							break
-						default:
-							goto l833
-						}
-					}
-					goto l832
-				l833:
-					position = position833
-				}
-				if !matchDot() {
+				position830 := position
+				if position == len(p.Buffer) {
 					goto l832
 				}
+				switch p.Buffer[position] {
+				case '(', ')', '>':
+					goto l832
+				default:
+					if !p.rules[ruleNonspacechar]() {
+						goto l832
+					}
+				}
+			l833:
+				if position == len(p.Buffer) {
+					goto l834
+				}
+				switch p.Buffer[position] {
+				case '(', ')', '>':
+					goto l834
+				default:
+					if !p.rules[ruleNonspacechar]() {
+						goto l834
+					}
+				}
+				goto l833
+			l834:
 				goto l831
 			l832:
-				position = position832
+				if !matchChar('(') {
+					goto l830
+				}
+				if !p.rules[ruleSourceContents]() {
+					goto l830
+				}
+				if !matchChar(')') {
+					goto l830
+				}
+			l831:
+				goto l829
+			l830:
+				position = position830
 			}
-			end = position
-			if !matchChar('"') {
-				goto l830
-			}
+			goto l827
+		l827:
 			return true
-		l830:
-			position = position0
-			return false
 		},
-		/* 177 AutoLink <- (AutoLinkUrl / AutoLinkEmail) */
+		/* 176 Title <- ((TitleSingle / TitleDouble / (< '' >)) { yy = p.mkString(yytext) }) */
 		func() bool {
-			if !p.rules[ruleAutoLinkUrl]() {
+			if !p.rules[ruleTitleSingle]() {
 				goto l837
 			}
 			goto l836
 		l837:
-			if !p.rules[ruleAutoLinkEmail]() {
-				goto l835
+			if !p.rules[ruleTitleDouble]() {
+				goto l838
 			}
+			goto l836
+		l838:
+			begin = position
+			end = position
 		l836:
+			do(80)
 			return true
-		l835:
-			return false
 		},
-		/* 178 AutoLinkUrl <- ('<' < [A-Za-z]+ '://' (!Newline !'>' .)+ > '>' {   yy = mk_link(mk_str(yytext), yytext, "") }) */
+		/* 177 TitleSingle <- ('\'' < (!('\'' Sp ((&[)] ')') | (&[\n\r] Newline))) .)* > '\'') */
 		func() bool {
 			position0 := position
-			if !matchChar('<') {
-				goto l838
+			if !matchChar('\'') {
+				goto l839
 			}
 			begin = position
-			if !matchClass(2) {
-				goto l838
-			}
-		l839:
-			if !matchClass(2) {
-				goto l840
-			}
-			goto l839
 		l840:
-			if !matchString("://") {
-				goto l838
-			}
-			if !p.rules[ruleNewline]() {
-				goto l843
-			}
-			goto l838
-		l843:
-			if peekChar('>') {
-				goto l838
-			}
-			if !matchDot() {
-				goto l838
-			}
-		l841:
 			{
-				position842 := position
-				if !p.rules[ruleNewline]() {
-					goto l844
-				}
-				goto l842
-			l844:
-				if peekChar('>') {
-					goto l842
+				position841 := position
+				{
+					position842 := position
+					if !matchChar('\'') {
+						goto l842
+					}
+					if !p.rules[ruleSp]() {
+						goto l842
+					}
+					{
+						if position == len(p.Buffer) {
+							goto l842
+						}
+						switch p.Buffer[position] {
+						case ')':
+							position++ // matchChar
+							break
+						case '\n', '\r':
+							if !p.rules[ruleNewline]() {
+								goto l842
+							}
+							break
+						default:
+							goto l842
+						}
+					}
+					goto l841
+				l842:
+					position = position842
 				}
 				if !matchDot() {
-					goto l842
+					goto l841
 				}
-				goto l841
-			l842:
-				position = position842
+				goto l840
+			l841:
+				position = position841
 			}
 			end = position
-			if !matchChar('>') {
-				goto l838
+			if !matchChar('\'') {
+				goto l839
 			}
-			do(77)
 			return true
-		l838:
+		l839:
 			position = position0
 			return false
 		},
-		/* 179 AutoLinkEmail <- ('<' < [-A-Za-z0-9+_]+ '@' (!Newline !'>' .)+ > '>' {
-                    yy = mk_link(mk_str(yytext), "mailto:"+yytext, "")
+		/* 178 TitleDouble <- ('"' < (!('"' Sp ((&[)] ')') | (&[\n\r] Newline))) .)* > '"') */
+		func() bool {
+			position0 := position
+			if !matchChar('"') {
+				goto l844
+			}
+			begin = position
+		l845:
+			{
+				position846 := position
+				{
+					position847 := position
+					if !matchChar('"') {
+						goto l847
+					}
+					if !p.rules[ruleSp]() {
+						goto l847
+					}
+					{
+						if position == len(p.Buffer) {
+							goto l847
+						}
+						switch p.Buffer[position] {
+						case ')':
+							position++ // matchChar
+							break
+						case '\n', '\r':
+							if !p.rules[ruleNewline]() {
+								goto l847
+							}
+							break
+						default:
+							goto l847
+						}
+					}
+					goto l846
+				l847:
+					position = position847
+				}
+				if !matchDot() {
+					goto l846
+				}
+				goto l845
+			l846:
+				position = position846
+			}
+			end = position
+			if !matchChar('"') {
+				goto l844
+			}
+			return true
+		l844:
+			position = position0
+			return false
+		},
+		/* 179 AutoLink <- (AutoLinkUrl / AutoLinkEmail) */
+		func() bool {
+			if !p.rules[ruleAutoLinkUrl]() {
+				goto l851
+			}
+			goto l850
+		l851:
+			if !p.rules[ruleAutoLinkEmail]() {
+				goto l849
+			}
+		l850:
+			return true
+		l849:
+			return false
+		},
+		/* 180 AutoLinkUrl <- ('<' < [A-Za-z]+ '://' (!Newline !'>' .)+ > '>' {   yy = p.mkLink(p.mkString(yytext), yytext, "") }) */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l852
+			}
+			begin = position
+			if !matchClass(2) {
+				goto l852
+			}
+		l853:
+			if !matchClass(2) {
+				goto l854
+			}
+			goto l853
+		l854:
+			if !matchString("://") {
+				goto l852
+			}
+			if !p.rules[ruleNewline]() {
+				goto l857
+			}
+			goto l852
+		l857:
+			if peekChar('>') {
+				goto l852
+			}
+			if !matchDot() {
+				goto l852
+			}
+		l855:
+			{
+				position856 := position
+				if !p.rules[ruleNewline]() {
+					goto l858
+				}
+				goto l856
+			l858:
+				if peekChar('>') {
+					goto l856
+				}
+				if !matchDot() {
+					goto l856
+				}
+				goto l855
+			l856:
+				position = position856
+			}
+			end = position
+			if !matchChar('>') {
+				goto l852
+			}
+			do(81)
+			return true
+		l852:
+			position = position0
+			return false
+		},
+		/* 181 AutoLinkEmail <- ('<' 'mailto:'? < [-A-Za-z0-9+_./!%~$]+ '@' (!Newline !'>' .)+ > '>' {
+                    yy = p.mkLink(p.mkString(yytext), "mailto:"+yytext, "")
                 }) */
 		func() bool {
 			position0 := position
 			if !matchChar('<') {
-				goto l845
+				goto l859
 			}
+			if !matchString("mailto:") {
+				goto l860
+			}
+		l860:
 			begin = position
 			if !matchClass(3) {
-				goto l845
+				goto l859
 			}
-		l846:
+		l862:
 			if !matchClass(3) {
-				goto l847
+				goto l863
 			}
-			goto l846
-		l847:
+			goto l862
+		l863:
 			if !matchChar('@') {
-				goto l845
+				goto l859
 			}
 			if !p.rules[ruleNewline]() {
-				goto l850
+				goto l866
 			}
-			goto l845
-		l850:
+			goto l859
+		l866:
 			if peekChar('>') {
-				goto l845
+				goto l859
 			}
 			if !matchDot() {
-				goto l845
+				goto l859
 			}
-		l848:
+		l864:
 			{
-				position849 := position
+				position865 := position
 				if !p.rules[ruleNewline]() {
-					goto l851
+					goto l867
 				}
-				goto l849
-			l851:
+				goto l865
+			l867:
 				if peekChar('>') {
-					goto l849
+					goto l865
 				}
 				if !matchDot() {
-					goto l849
+					goto l865
 				}
-				goto l848
-			l849:
-				position = position849
+				goto l864
+			l865:
+				position = position865
 			}
 			end = position
 			if !matchChar('>') {
-				goto l845
+				goto l859
 			}
-			do(78)
+			do(82)
 			return true
-		l845:
+		l859:
 			position = position0
 			return false
 		},
-		/* 180 Reference <- (NonindentSpace !'[]' Label ':' Spnl RefSrc Spnl RefTitle BlankLine* { yy = mk_link(l.children, s.contents.str, t.contents.str)
+		/* 182 Reference <- (NonindentSpace !'[]' Label ':' Spnl RefSrc RefTitle BlankLine+ { yy = p.mkLink(l.children, s.contents.str, t.contents.str)
               s = nil
               t = nil
               l = nil
@@ -9124,378 +9237,261 @@ func (p *yyParser) Init() {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 3)
 			if !p.rules[ruleNonindentSpace]() {
-				goto l852
+				goto l868
 			}
 			if !matchString("[]") {
-				goto l853
+				goto l869
 			}
-			goto l852
-		l853:
+			goto l868
+		l869:
 			if !p.rules[ruleLabel]() {
-				goto l852
+				goto l868
 			}
 			doarg(yySet, -2)
 			if !matchChar(':') {
-				goto l852
+				goto l868
 			}
 			if !p.rules[ruleSpnl]() {
-				goto l852
+				goto l868
 			}
 			if !p.rules[ruleRefSrc]() {
-				goto l852
-			}
-			doarg(yySet, -1)
-			if !p.rules[ruleSpnl]() {
-				goto l852
-			}
-			if !p.rules[ruleRefTitle]() {
-				goto l852
+				goto l868
 			}
 			doarg(yySet, -3)
-		l854:
-			if !p.rules[ruleBlankLine]() {
-				goto l855
+			if !p.rules[ruleRefTitle]() {
+				goto l868
 			}
-			goto l854
-		l855:
-			do(79)
+			doarg(yySet, -1)
+			if !p.rules[ruleBlankLine]() {
+				goto l868
+			}
+		l870:
+			if !p.rules[ruleBlankLine]() {
+				goto l871
+			}
+			goto l870
+		l871:
+			do(83)
 			doarg(yyPop, 3)
 			return true
-		l852:
+		l868:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 181 Label <- ('[' ((!'^' &{p.extension.Notes}) / (&. &{!p.extension.Notes})) StartList (!']' Inline { a = cons(yy, a) })* ']' { yy = mk_list(LIST, a) }) */
+		/* 183 Label <- ('[' ((!'^' &{p.extension.Notes}) / (&. &{!p.extension.Notes})) StartList (!']' Inline { a = cons(yy, a) })* ']' { yy = p.mkList(LIST, a) }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
 			if !matchChar('[') {
-				goto l856
+				goto l872
 			}
 			if peekChar('^') {
-				goto l858
+				goto l874
 			}
 			if !(p.extension.Notes) {
-				goto l858
+				goto l874
 			}
-			goto l857
-		l858:
+			goto l873
+		l874:
 			if !(position < len(p.Buffer)) {
-				goto l856
+				goto l872
 			}
 			if !(!p.extension.Notes) {
-				goto l856
+				goto l872
 			}
-		l857:
+		l873:
 			if !p.rules[ruleStartList]() {
-				goto l856
+				goto l872
 			}
 			doarg(yySet, -1)
-		l859:
+		l875:
 			{
-				position860 := position
+				position876 := position
 				if peekChar(']') {
-					goto l860
+					goto l876
 				}
 				if !p.rules[ruleInline]() {
-					goto l860
+					goto l876
 				}
-				do(80)
-				goto l859
-			l860:
-				position = position860
+				do(84)
+				goto l875
+			l876:
+				position = position876
 			}
 			if !matchChar(']') {
-				goto l856
+				goto l872
 			}
-			do(81)
+			do(85)
 			doarg(yyPop, 1)
 			return true
-		l856:
+		l872:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 182 RefSrc <- (< Nonspacechar+ > { yy = mk_str(yytext)
+		/* 184 RefSrc <- (< Nonspacechar+ > { yy = p.mkString(yytext)
            yy.key = HTML }) */
 		func() bool {
 			position0 := position
 			begin = position
 			if !p.rules[ruleNonspacechar]() {
-				goto l861
+				goto l877
 			}
-		l862:
+		l878:
 			if !p.rules[ruleNonspacechar]() {
-				goto l863
+				goto l879
 			}
-			goto l862
-		l863:
+			goto l878
+		l879:
 			end = position
-			do(82)
+			do(86)
 			return true
-		l861:
+		l877:
 			position = position0
 			return false
 		},
-		/* 183 RefTitle <- ((RefTitleSingle / RefTitleDouble / RefTitleParens / EmptyTitle) { yy = mk_str(yytext) }) */
+		/* 185 RefTitle <- ((RefTitleSingle / RefTitleDouble / RefTitleParens / EmptyTitle) { yy = p.mkString(yytext) }) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleRefTitleSingle]() {
-				goto l866
+				goto l882
 			}
-			goto l865
-		l866:
+			goto l881
+		l882:
 			if !p.rules[ruleRefTitleDouble]() {
-				goto l867
+				goto l883
 			}
-			goto l865
-		l867:
+			goto l881
+		l883:
 			if !p.rules[ruleRefTitleParens]() {
-				goto l868
+				goto l884
 			}
-			goto l865
-		l868:
+			goto l881
+		l884:
 			if !p.rules[ruleEmptyTitle]() {
-				goto l864
-			}
-		l865:
-			do(83)
-			return true
-		l864:
-			position = position0
-			return false
-		},
-		/* 184 EmptyTitle <- (< '' >) */
-		func() bool {
-			begin = position
-			end = position
-			return true
-		},
-		/* 185 RefTitleSingle <- ('\'' < (!((&[\'] ('\'' Sp Newline)) | (&[\n\r] Newline)) .)* > '\'') */
-		func() bool {
-			position0 := position
-			if !matchChar('\'') {
-				goto l870
-			}
-			begin = position
-		l871:
-			{
-				position872 := position
-				{
-					position873 := position
-					{
-						if position == len(p.Buffer) {
-							goto l873
-						}
-						switch p.Buffer[position] {
-						case '\'':
-							position++ // matchChar
-							if !p.rules[ruleSp]() {
-								goto l873
-							}
-							if !p.rules[ruleNewline]() {
-								goto l873
-							}
-							break
-						case '\n', '\r':
-							if !p.rules[ruleNewline]() {
-								goto l873
-							}
-							break
-						default:
-							goto l873
-						}
-					}
-					goto l872
-				l873:
-					position = position873
-				}
-				if !matchDot() {
-					goto l872
-				}
-				goto l871
-			l872:
-				position = position872
-			}
-			end = position
-			if !matchChar('\'') {
-				goto l870
-			}
-			return true
-		l870:
-			position = position0
-			return false
-		},
-		/* 186 RefTitleDouble <- ('"' < (!((&[\"] ('"' Sp Newline)) | (&[\n\r] Newline)) .)* > '"') */
-		func() bool {
-			position0 := position
-			if !matchChar('"') {
-				goto l875
-			}
-			begin = position
-		l876:
-			{
-				position877 := position
-				{
-					position878 := position
-					{
-						if position == len(p.Buffer) {
-							goto l878
-						}
-						switch p.Buffer[position] {
-						case '"':
-							position++ // matchChar
-							if !p.rules[ruleSp]() {
-								goto l878
-							}
-							if !p.rules[ruleNewline]() {
-								goto l878
-							}
-							break
-						case '\n', '\r':
-							if !p.rules[ruleNewline]() {
-								goto l878
-							}
-							break
-						default:
-							goto l878
-						}
-					}
-					goto l877
-				l878:
-					position = position878
-				}
-				if !matchDot() {
-					goto l877
-				}
-				goto l876
-			l877:
-				position = position877
-			}
-			end = position
-			if !matchChar('"') {
-				goto l875
-			}
-			return true
-		l875:
-			position = position0
-			return false
-		},
-		/* 187 RefTitleParens <- ('(' < (!((&[)] (')' Sp Newline)) | (&[\n\r] Newline)) .)* > ')') */
-		func() bool {
-			position0 := position
-			if !matchChar('(') {
 				goto l880
 			}
-			begin = position
 		l881:
-			{
-				position882 := position
-				{
-					position883 := position
-					{
-						if position == len(p.Buffer) {
-							goto l883
-						}
-						switch p.Buffer[position] {
-						case ')':
-							position++ // matchChar
-							if !p.rules[ruleSp]() {
-								goto l883
-							}
-							if !p.rules[ruleNewline]() {
-								goto l883
-							}
-							break
-						case '\n', '\r':
-							if !p.rules[ruleNewline]() {
-								goto l883
-							}
-							break
-						default:
-							goto l883
-						}
-					}
-					goto l882
-				l883:
-					position = position883
-				}
-				if !matchDot() {
-					goto l882
-				}
-				goto l881
-			l882:
-				position = position882
-			}
-			end = position
-			if !matchChar(')') {
-				goto l880
-			}
+			do(87)
 			return true
 		l880:
 			position = position0
 			return false
 		},
-		/* 188 References <- (StartList ((Reference { a = cons(b, a) }) / SkipBlock)* { p.references = reverse(a) } commit) */
+		/* 186 EmptyTitle <- (< '' >) */
 		func() bool {
-			position0, thunkPosition0 := position, thunkPosition
-			doarg(yyPush, 2)
-			if !p.rules[ruleStartList]() {
-				goto l885
-			}
-			doarg(yySet, -2)
-		l886:
-			{
-				position887, thunkPosition887 := position, thunkPosition
-				{
-					position888, thunkPosition888 := position, thunkPosition
-					if !p.rules[ruleReference]() {
-						goto l889
-					}
-					doarg(yySet, -1)
-					do(84)
-					goto l888
-				l889:
-					position, thunkPosition = position888, thunkPosition888
-					if !p.rules[ruleSkipBlock]() {
-						goto l887
-					}
-				}
-			l888:
-				goto l886
-			l887:
-				position, thunkPosition = position887, thunkPosition887
-			}
-			do(85)
-			if !(commit(thunkPosition0)) {
-				goto l885
-			}
-			doarg(yyPop, 2)
+			begin = position
+			end = position
 			return true
-		l885:
-			position, thunkPosition = position0, thunkPosition0
-			return false
 		},
-		/* 189 Ticks1 <- ('`' !'`') */
+		/* 187 RefTitleSingle <- (Spnl '\'' < (!((&[\'] ('\'' Sp Newline)) | (&[\n\r] Newline)) .)* > '\'') */
 		func() bool {
 			position0 := position
-			if !matchChar('`') {
-				goto l890
+			if !p.rules[ruleSpnl]() {
+				goto l886
 			}
-			if peekChar('`') {
-				goto l890
+			if !matchChar('\'') {
+				goto l886
+			}
+			begin = position
+		l887:
+			{
+				position888 := position
+				{
+					position889 := position
+					{
+						if position == len(p.Buffer) {
+							goto l889
+						}
+						switch p.Buffer[position] {
+						case '\'':
+							position++ // matchChar
+							if !p.rules[ruleSp]() {
+								goto l889
+							}
+							if !p.rules[ruleNewline]() {
+								goto l889
+							}
+							break
+						case '\n', '\r':
+							if !p.rules[ruleNewline]() {
+								goto l889
+							}
+							break
+						default:
+							goto l889
+						}
+					}
+					goto l888
+				l889:
+					position = position889
+				}
+				if !matchDot() {
+					goto l888
+				}
+				goto l887
+			l888:
+				position = position888
+			}
+			end = position
+			if !matchChar('\'') {
+				goto l886
 			}
 			return true
-		l890:
+		l886:
 			position = position0
 			return false
 		},
-		/* 190 Ticks2 <- ('``' !'`') */
+		/* 188 RefTitleDouble <- (Spnl '"' < (!((&[\"] ('"' Sp Newline)) | (&[\n\r] Newline)) .)* > '"') */
 		func() bool {
 			position0 := position
-			if !matchString("``") {
+			if !p.rules[ruleSpnl]() {
 				goto l891
 			}
-			if peekChar('`') {
+			if !matchChar('"') {
+				goto l891
+			}
+			begin = position
+		l892:
+			{
+				position893 := position
+				{
+					position894 := position
+					{
+						if position == len(p.Buffer) {
+							goto l894
+						}
+						switch p.Buffer[position] {
+						case '"':
+							position++ // matchChar
+							if !p.rules[ruleSp]() {
+								goto l894
+							}
+							if !p.rules[ruleNewline]() {
+								goto l894
+							}
+							break
+						case '\n', '\r':
+							if !p.rules[ruleNewline]() {
+								goto l894
+							}
+							break
+						default:
+							goto l894
+						}
+					}
+					goto l893
+				l894:
+					position = position894
+				}
+				if !matchDot() {
+					goto l893
+				}
+				goto l892
+			l893:
+				position = position893
+			}
+			end = position
+			if !matchChar('"') {
 				goto l891
 			}
 			return true
@@ -9503,962 +9499,1088 @@ func (p *yyParser) Init() {
 			position = position0
 			return false
 		},
-		/* 191 Ticks3 <- ('```' !'`') */
+		/* 189 RefTitleParens <- (Spnl '(' < (!((&[)] (')' Sp Newline)) | (&[\n\r] Newline)) .)* > ')') */
 		func() bool {
 			position0 := position
-			if !matchString("```") {
-				goto l892
+			if !p.rules[ruleSpnl]() {
+				goto l896
 			}
-			if peekChar('`') {
-				goto l892
+			if !matchChar('(') {
+				goto l896
 			}
-			return true
-		l892:
-			position = position0
-			return false
-		},
-		/* 192 Ticks4 <- ('````' !'`') */
-		func() bool {
-			position0 := position
-			if !matchString("````") {
-				goto l893
-			}
-			if peekChar('`') {
-				goto l893
-			}
-			return true
-		l893:
-			position = position0
-			return false
-		},
-		/* 193 Ticks5 <- ('`````' !'`') */
-		func() bool {
-			position0 := position
-			if !matchString("`````") {
-				goto l894
-			}
-			if peekChar('`') {
-				goto l894
-			}
-			return true
-		l894:
-			position = position0
-			return false
-		},
-		/* 194 Code <- (((Ticks1 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks1 '`'+)) | (&[\t\n\r ] (!(Sp Ticks1) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks1) / (Ticks2 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks2 '`'+)) | (&[\t\n\r ] (!(Sp Ticks2) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks2) / (Ticks3 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks3 '`'+)) | (&[\t\n\r ] (!(Sp Ticks3) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks3) / (Ticks4 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks4 '`'+)) | (&[\t\n\r ] (!(Sp Ticks4) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks4) / (Ticks5 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks5 '`'+)) | (&[\t\n\r ] (!(Sp Ticks5) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks5)) { yy = mk_str(yytext); yy.key = CODE }) */
-		func() bool {
-			position0 := position
+			begin = position
+		l897:
 			{
-				position896 := position
-				if !p.rules[ruleTicks1]() {
-					goto l897
-				}
-				if !p.rules[ruleSp]() {
-					goto l897
-				}
-				begin = position
-				if peekChar('`') {
-					goto l901
-				}
-				if !p.rules[ruleNonspacechar]() {
-					goto l901
-				}
-			l902:
-				if peekChar('`') {
-					goto l903
-				}
-				if !p.rules[ruleNonspacechar]() {
-					goto l903
-				}
-				goto l902
-			l903:
-				goto l900
-			l901:
-				{
-					if position == len(p.Buffer) {
-						goto l897
-					}
-					switch p.Buffer[position] {
-					case '`':
-						if !p.rules[ruleTicks1]() {
-							goto l905
-						}
-						goto l897
-					l905:
-						if !matchChar('`') {
-							goto l897
-						}
-					l906:
-						if !matchChar('`') {
-							goto l907
-						}
-						goto l906
-					l907:
-						break
-					default:
-						{
-							position908 := position
-							if !p.rules[ruleSp]() {
-								goto l908
-							}
-							if !p.rules[ruleTicks1]() {
-								goto l908
-							}
-							goto l897
-						l908:
-							position = position908
-						}
-						{
-							if position == len(p.Buffer) {
-								goto l897
-							}
-							switch p.Buffer[position] {
-							case '\n', '\r':
-								if !p.rules[ruleNewline]() {
-									goto l897
-								}
-								if !p.rules[ruleBlankLine]() {
-									goto l910
-								}
-								goto l897
-							l910:
-								break
-							case '\t', ' ':
-								if !p.rules[ruleSpacechar]() {
-									goto l897
-								}
-								break
-							default:
-								goto l897
-							}
-						}
-					}
-				}
-			l900:
-			l898:
+				position898 := position
 				{
 					position899 := position
-					if peekChar('`') {
-						goto l912
-					}
-					if !p.rules[ruleNonspacechar]() {
-						goto l912
-					}
-				l913:
-					if peekChar('`') {
-						goto l914
-					}
-					if !p.rules[ruleNonspacechar]() {
-						goto l914
-					}
-					goto l913
-				l914:
-					goto l911
-				l912:
 					{
 						if position == len(p.Buffer) {
 							goto l899
 						}
 						switch p.Buffer[position] {
-						case '`':
-							if !p.rules[ruleTicks1]() {
-								goto l916
-							}
-							goto l899
-						l916:
-							if !matchChar('`') {
+						case ')':
+							position++ // matchChar
+							if !p.rules[ruleSp]() {
 								goto l899
 							}
-						l917:
-							if !matchChar('`') {
-								goto l918
+							if !p.rules[ruleNewline]() {
+								goto l899
 							}
-							goto l917
-						l918:
+							break
+						case '\n', '\r':
+							if !p.rules[ruleNewline]() {
+								goto l899
+							}
 							break
 						default:
-							{
-								position919 := position
-								if !p.rules[ruleSp]() {
-									goto l919
-								}
-								if !p.rules[ruleTicks1]() {
-									goto l919
-								}
-								goto l899
-							l919:
-								position = position919
-							}
-							{
-								if position == len(p.Buffer) {
-									goto l899
-								}
-								switch p.Buffer[position] {
-								case '\n', '\r':
-									if !p.rules[ruleNewline]() {
-										goto l899
-									}
-									if !p.rules[ruleBlankLine]() {
-										goto l921
-									}
-									goto l899
-								l921:
-									break
-								case '\t', ' ':
-									if !p.rules[ruleSpacechar]() {
-										goto l899
-									}
-									break
-								default:
-									goto l899
-								}
-							}
+							goto l899
 						}
 					}
-				l911:
 					goto l898
 				l899:
 					position = position899
 				}
-				end = position
-				if !p.rules[ruleSp]() {
-					goto l897
+				if !matchDot() {
+					goto l898
 				}
-				if !p.rules[ruleTicks1]() {
-					goto l897
-				}
+				goto l897
+			l898:
+				position = position898
+			}
+			end = position
+			if !matchChar(')') {
 				goto l896
-			l897:
-				position = position896
-				if !p.rules[ruleTicks2]() {
-					goto l922
+			}
+			return true
+		l896:
+			position = position0
+			return false
+		},
+		/* 190 References <- (StartList ((Reference { a = cons(b, a) }) / SkipBlock)* { p.references = reverse(a) } commit) */
+		func() bool {
+			position0, thunkPosition0 := position, thunkPosition
+			doarg(yyPush, 2)
+			if !p.rules[ruleStartList]() {
+				goto l901
+			}
+			doarg(yySet, -2)
+		l902:
+			{
+				position903, thunkPosition903 := position, thunkPosition
+				{
+					position904, thunkPosition904 := position, thunkPosition
+					if !p.rules[ruleReference]() {
+						goto l905
+					}
+					doarg(yySet, -1)
+					do(88)
+					goto l904
+				l905:
+					position, thunkPosition = position904, thunkPosition904
+					if !p.rules[ruleSkipBlock]() {
+						goto l903
+					}
+				}
+			l904:
+				goto l902
+			l903:
+				position, thunkPosition = position903, thunkPosition903
+			}
+			do(89)
+			if !(commit(thunkPosition0)) {
+				goto l901
+			}
+			doarg(yyPop, 2)
+			return true
+		l901:
+			position, thunkPosition = position0, thunkPosition0
+			return false
+		},
+		/* 191 Ticks1 <- ('`' !'`') */
+		func() bool {
+			position0 := position
+			if !matchChar('`') {
+				goto l906
+			}
+			if peekChar('`') {
+				goto l906
+			}
+			return true
+		l906:
+			position = position0
+			return false
+		},
+		/* 192 Ticks2 <- ('``' !'`') */
+		func() bool {
+			position0 := position
+			if !matchString("``") {
+				goto l907
+			}
+			if peekChar('`') {
+				goto l907
+			}
+			return true
+		l907:
+			position = position0
+			return false
+		},
+		/* 193 Ticks3 <- ('```' !'`') */
+		func() bool {
+			position0 := position
+			if !matchString("```") {
+				goto l908
+			}
+			if peekChar('`') {
+				goto l908
+			}
+			return true
+		l908:
+			position = position0
+			return false
+		},
+		/* 194 Ticks4 <- ('````' !'`') */
+		func() bool {
+			position0 := position
+			if !matchString("````") {
+				goto l909
+			}
+			if peekChar('`') {
+				goto l909
+			}
+			return true
+		l909:
+			position = position0
+			return false
+		},
+		/* 195 Ticks5 <- ('`````' !'`') */
+		func() bool {
+			position0 := position
+			if !matchString("`````") {
+				goto l910
+			}
+			if peekChar('`') {
+				goto l910
+			}
+			return true
+		l910:
+			position = position0
+			return false
+		},
+		/* 196 Code <- (((Ticks1 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks1 '`'+)) | (&[\t\n\r ] (!(Sp Ticks1) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks1) / (Ticks2 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks2 '`'+)) | (&[\t\n\r ] (!(Sp Ticks2) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks2) / (Ticks3 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks3 '`'+)) | (&[\t\n\r ] (!(Sp Ticks3) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks3) / (Ticks4 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks4 '`'+)) | (&[\t\n\r ] (!(Sp Ticks4) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks4) / (Ticks5 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks5 '`'+)) | (&[\t\n\r ] (!(Sp Ticks5) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks5)) { yy = p.mkString(yytext); yy.key = CODE }) */
+		func() bool {
+			position0 := position
+			{
+				position912 := position
+				if !p.rules[ruleTicks1]() {
+					goto l913
 				}
 				if !p.rules[ruleSp]() {
-					goto l922
+					goto l913
 				}
 				begin = position
 				if peekChar('`') {
-					goto l926
+					goto l917
 				}
 				if !p.rules[ruleNonspacechar]() {
-					goto l926
+					goto l917
 				}
-			l927:
+			l918:
 				if peekChar('`') {
-					goto l928
+					goto l919
 				}
 				if !p.rules[ruleNonspacechar]() {
-					goto l928
+					goto l919
 				}
-				goto l927
-			l928:
-				goto l925
-			l926:
+				goto l918
+			l919:
+				goto l916
+			l917:
 				{
 					if position == len(p.Buffer) {
+						goto l913
+					}
+					switch p.Buffer[position] {
+					case '`':
+						if !p.rules[ruleTicks1]() {
+							goto l921
+						}
+						goto l913
+					l921:
+						if !matchChar('`') {
+							goto l913
+						}
+					l922:
+						if !matchChar('`') {
+							goto l923
+						}
 						goto l922
+					l923:
+						break
+					default:
+						{
+							position924 := position
+							if !p.rules[ruleSp]() {
+								goto l924
+							}
+							if !p.rules[ruleTicks1]() {
+								goto l924
+							}
+							goto l913
+						l924:
+							position = position924
+						}
+						{
+							if position == len(p.Buffer) {
+								goto l913
+							}
+							switch p.Buffer[position] {
+							case '\n', '\r':
+								if !p.rules[ruleNewline]() {
+									goto l913
+								}
+								if !p.rules[ruleBlankLine]() {
+									goto l926
+								}
+								goto l913
+							l926:
+								break
+							case '\t', ' ':
+								if !p.rules[ruleSpacechar]() {
+									goto l913
+								}
+								break
+							default:
+								goto l913
+							}
+						}
+					}
+				}
+			l916:
+			l914:
+				{
+					position915 := position
+					if peekChar('`') {
+						goto l928
+					}
+					if !p.rules[ruleNonspacechar]() {
+						goto l928
+					}
+				l929:
+					if peekChar('`') {
+						goto l930
+					}
+					if !p.rules[ruleNonspacechar]() {
+						goto l930
+					}
+					goto l929
+				l930:
+					goto l927
+				l928:
+					{
+						if position == len(p.Buffer) {
+							goto l915
+						}
+						switch p.Buffer[position] {
+						case '`':
+							if !p.rules[ruleTicks1]() {
+								goto l932
+							}
+							goto l915
+						l932:
+							if !matchChar('`') {
+								goto l915
+							}
+						l933:
+							if !matchChar('`') {
+								goto l934
+							}
+							goto l933
+						l934:
+							break
+						default:
+							{
+								position935 := position
+								if !p.rules[ruleSp]() {
+									goto l935
+								}
+								if !p.rules[ruleTicks1]() {
+									goto l935
+								}
+								goto l915
+							l935:
+								position = position935
+							}
+							{
+								if position == len(p.Buffer) {
+									goto l915
+								}
+								switch p.Buffer[position] {
+								case '\n', '\r':
+									if !p.rules[ruleNewline]() {
+										goto l915
+									}
+									if !p.rules[ruleBlankLine]() {
+										goto l937
+									}
+									goto l915
+								l937:
+									break
+								case '\t', ' ':
+									if !p.rules[ruleSpacechar]() {
+										goto l915
+									}
+									break
+								default:
+									goto l915
+								}
+							}
+						}
+					}
+				l927:
+					goto l914
+				l915:
+					position = position915
+				}
+				end = position
+				if !p.rules[ruleSp]() {
+					goto l913
+				}
+				if !p.rules[ruleTicks1]() {
+					goto l913
+				}
+				goto l912
+			l913:
+				position = position912
+				if !p.rules[ruleTicks2]() {
+					goto l938
+				}
+				if !p.rules[ruleSp]() {
+					goto l938
+				}
+				begin = position
+				if peekChar('`') {
+					goto l942
+				}
+				if !p.rules[ruleNonspacechar]() {
+					goto l942
+				}
+			l943:
+				if peekChar('`') {
+					goto l944
+				}
+				if !p.rules[ruleNonspacechar]() {
+					goto l944
+				}
+				goto l943
+			l944:
+				goto l941
+			l942:
+				{
+					if position == len(p.Buffer) {
+						goto l938
 					}
 					switch p.Buffer[position] {
 					case '`':
 						if !p.rules[ruleTicks2]() {
-							goto l930
+							goto l946
 						}
-						goto l922
-					l930:
+						goto l938
+					l946:
 						if !matchChar('`') {
-							goto l922
+							goto l938
 						}
-					l931:
+					l947:
 						if !matchChar('`') {
-							goto l932
+							goto l948
 						}
-						goto l931
-					l932:
+						goto l947
+					l948:
 						break
 					default:
 						{
-							position933 := position
+							position949 := position
 							if !p.rules[ruleSp]() {
-								goto l933
+								goto l949
 							}
 							if !p.rules[ruleTicks2]() {
-								goto l933
+								goto l949
 							}
-							goto l922
-						l933:
-							position = position933
+							goto l938
+						l949:
+							position = position949
 						}
 						{
 							if position == len(p.Buffer) {
-								goto l922
+								goto l938
 							}
 							switch p.Buffer[position] {
 							case '\n', '\r':
 								if !p.rules[ruleNewline]() {
-									goto l922
+									goto l938
 								}
 								if !p.rules[ruleBlankLine]() {
-									goto l935
+									goto l951
 								}
-								goto l922
-							l935:
+								goto l938
+							l951:
 								break
 							case '\t', ' ':
 								if !p.rules[ruleSpacechar]() {
-									goto l922
+									goto l938
 								}
 								break
 							default:
-								goto l922
+								goto l938
 							}
 						}
 					}
 				}
-			l925:
-			l923:
+			l941:
+			l939:
 				{
-					position924 := position
+					position940 := position
 					if peekChar('`') {
-						goto l937
+						goto l953
 					}
 					if !p.rules[ruleNonspacechar]() {
-						goto l937
+						goto l953
 					}
-				l938:
+				l954:
 					if peekChar('`') {
-						goto l939
+						goto l955
 					}
 					if !p.rules[ruleNonspacechar]() {
-						goto l939
+						goto l955
 					}
-					goto l938
-				l939:
-					goto l936
-				l937:
+					goto l954
+				l955:
+					goto l952
+				l953:
 					{
 						if position == len(p.Buffer) {
-							goto l924
+							goto l940
 						}
 						switch p.Buffer[position] {
 						case '`':
 							if !p.rules[ruleTicks2]() {
-								goto l941
+								goto l957
 							}
-							goto l924
-						l941:
+							goto l940
+						l957:
 							if !matchChar('`') {
-								goto l924
+								goto l940
 							}
-						l942:
+						l958:
 							if !matchChar('`') {
-								goto l943
+								goto l959
 							}
-							goto l942
-						l943:
+							goto l958
+						l959:
 							break
 						default:
 							{
-								position944 := position
+								position960 := position
 								if !p.rules[ruleSp]() {
-									goto l944
+									goto l960
 								}
 								if !p.rules[ruleTicks2]() {
-									goto l944
+									goto l960
 								}
-								goto l924
-							l944:
-								position = position944
+								goto l940
+							l960:
+								position = position960
 							}
 							{
 								if position == len(p.Buffer) {
-									goto l924
+									goto l940
 								}
 								switch p.Buffer[position] {
 								case '\n', '\r':
 									if !p.rules[ruleNewline]() {
-										goto l924
+										goto l940
 									}
 									if !p.rules[ruleBlankLine]() {
-										goto l946
+										goto l962
 									}
-									goto l924
-								l946:
+									goto l940
+								l962:
 									break
 								case '\t', ' ':
 									if !p.rules[ruleSpacechar]() {
-										goto l924
+										goto l940
 									}
 									break
 								default:
-									goto l924
+									goto l940
 								}
 							}
 						}
 					}
-				l936:
-					goto l923
-				l924:
-					position = position924
+				l952:
+					goto l939
+				l940:
+					position = position940
 				}
 				end = position
 				if !p.rules[ruleSp]() {
-					goto l922
+					goto l938
 				}
 				if !p.rules[ruleTicks2]() {
-					goto l922
+					goto l938
 				}
-				goto l896
-			l922:
-				position = position896
+				goto l912
+			l938:
+				position = position912
 				if !p.rules[ruleTicks3]() {
-					goto l947
+					goto l963
 				}
 				if !p.rules[ruleSp]() {
-					goto l947
+					goto l963
 				}
 				begin = position
 				if peekChar('`') {
-					goto l951
+					goto l967
 				}
 				if !p.rules[ruleNonspacechar]() {
-					goto l951
+					goto l967
 				}
-			l952:
+			l968:
 				if peekChar('`') {
-					goto l953
+					goto l969
 				}
 				if !p.rules[ruleNonspacechar]() {
-					goto l953
+					goto l969
 				}
-				goto l952
-			l953:
-				goto l950
-			l951:
+				goto l968
+			l969:
+				goto l966
+			l967:
 				{
 					if position == len(p.Buffer) {
-						goto l947
+						goto l963
 					}
 					switch p.Buffer[position] {
 					case '`':
 						if !p.rules[ruleTicks3]() {
-							goto l955
+							goto l971
 						}
-						goto l947
-					l955:
+						goto l963
+					l971:
 						if !matchChar('`') {
-							goto l947
+							goto l963
 						}
-					l956:
+					l972:
 						if !matchChar('`') {
-							goto l957
+							goto l973
 						}
-						goto l956
-					l957:
+						goto l972
+					l973:
 						break
 					default:
 						{
-							position958 := position
+							position974 := position
 							if !p.rules[ruleSp]() {
-								goto l958
+								goto l974
 							}
 							if !p.rules[ruleTicks3]() {
-								goto l958
+								goto l974
 							}
-							goto l947
-						l958:
-							position = position958
+							goto l963
+						l974:
+							position = position974
 						}
 						{
 							if position == len(p.Buffer) {
-								goto l947
+								goto l963
 							}
 							switch p.Buffer[position] {
 							case '\n', '\r':
 								if !p.rules[ruleNewline]() {
-									goto l947
+									goto l963
 								}
 								if !p.rules[ruleBlankLine]() {
-									goto l960
+									goto l976
 								}
-								goto l947
-							l960:
+								goto l963
+							l976:
 								break
 							case '\t', ' ':
 								if !p.rules[ruleSpacechar]() {
-									goto l947
+									goto l963
 								}
 								break
 							default:
-								goto l947
+								goto l963
 							}
 						}
 					}
 				}
-			l950:
-			l948:
+			l966:
+			l964:
 				{
-					position949 := position
+					position965 := position
 					if peekChar('`') {
-						goto l962
+						goto l978
 					}
 					if !p.rules[ruleNonspacechar]() {
-						goto l962
+						goto l978
 					}
-				l963:
+				l979:
 					if peekChar('`') {
-						goto l964
+						goto l980
 					}
 					if !p.rules[ruleNonspacechar]() {
-						goto l964
+						goto l980
 					}
-					goto l963
-				l964:
-					goto l961
-				l962:
+					goto l979
+				l980:
+					goto l977
+				l978:
 					{
 						if position == len(p.Buffer) {
-							goto l949
+							goto l965
 						}
 						switch p.Buffer[position] {
 						case '`':
 							if !p.rules[ruleTicks3]() {
-								goto l966
+								goto l982
 							}
-							goto l949
-						l966:
+							goto l965
+						l982:
 							if !matchChar('`') {
-								goto l949
+								goto l965
 							}
-						l967:
+						l983:
 							if !matchChar('`') {
-								goto l968
+								goto l984
 							}
-							goto l967
-						l968:
+							goto l983
+						l984:
 							break
 						default:
 							{
-								position969 := position
+								position985 := position
 								if !p.rules[ruleSp]() {
-									goto l969
+									goto l985
 								}
 								if !p.rules[ruleTicks3]() {
-									goto l969
+									goto l985
 								}
-								goto l949
-							l969:
-								position = position969
+								goto l965
+							l985:
+								position = position985
 							}
 							{
 								if position == len(p.Buffer) {
-									goto l949
+									goto l965
 								}
 								switch p.Buffer[position] {
 								case '\n', '\r':
 									if !p.rules[ruleNewline]() {
-										goto l949
+										goto l965
 									}
 									if !p.rules[ruleBlankLine]() {
-										goto l971
+										goto l987
 									}
-									goto l949
-								l971:
+									goto l965
+								l987:
 									break
 								case '\t', ' ':
 									if !p.rules[ruleSpacechar]() {
-										goto l949
+										goto l965
 									}
 									break
 								default:
-									goto l949
+									goto l965
 								}
 							}
 						}
 					}
-				l961:
-					goto l948
-				l949:
-					position = position949
+				l977:
+					goto l964
+				l965:
+					position = position965
 				}
 				end = position
 				if !p.rules[ruleSp]() {
-					goto l947
+					goto l963
 				}
 				if !p.rules[ruleTicks3]() {
-					goto l947
+					goto l963
 				}
-				goto l896
-			l947:
-				position = position896
+				goto l912
+			l963:
+				position = position912
 				if !p.rules[ruleTicks4]() {
-					goto l972
+					goto l988
 				}
 				if !p.rules[ruleSp]() {
-					goto l972
+					goto l988
 				}
 				begin = position
 				if peekChar('`') {
-					goto l976
+					goto l992
 				}
 				if !p.rules[ruleNonspacechar]() {
-					goto l976
+					goto l992
 				}
-			l977:
+			l993:
 				if peekChar('`') {
-					goto l978
+					goto l994
 				}
 				if !p.rules[ruleNonspacechar]() {
-					goto l978
+					goto l994
 				}
-				goto l977
-			l978:
-				goto l975
-			l976:
+				goto l993
+			l994:
+				goto l991
+			l992:
 				{
 					if position == len(p.Buffer) {
-						goto l972
+						goto l988
 					}
 					switch p.Buffer[position] {
 					case '`':
 						if !p.rules[ruleTicks4]() {
-							goto l980
+							goto l996
 						}
-						goto l972
-					l980:
+						goto l988
+					l996:
 						if !matchChar('`') {
-							goto l972
+							goto l988
 						}
-					l981:
+					l997:
 						if !matchChar('`') {
-							goto l982
+							goto l998
 						}
-						goto l981
-					l982:
+						goto l997
+					l998:
 						break
 					default:
 						{
-							position983 := position
+							position999 := position
 							if !p.rules[ruleSp]() {
-								goto l983
+								goto l999
 							}
 							if !p.rules[ruleTicks4]() {
-								goto l983
+								goto l999
 							}
-							goto l972
-						l983:
-							position = position983
+							goto l988
+						l999:
+							position = position999
 						}
 						{
 							if position == len(p.Buffer) {
-								goto l972
+								goto l988
 							}
 							switch p.Buffer[position] {
 							case '\n', '\r':
 								if !p.rules[ruleNewline]() {
-									goto l972
+									goto l988
 								}
 								if !p.rules[ruleBlankLine]() {
-									goto l985
+									goto l1001
 								}
-								goto l972
-							l985:
+								goto l988
+							l1001:
 								break
 							case '\t', ' ':
 								if !p.rules[ruleSpacechar]() {
-									goto l972
+									goto l988
 								}
 								break
 							default:
-								goto l972
+								goto l988
 							}
 						}
 					}
 				}
-			l975:
-			l973:
+			l991:
+			l989:
 				{
-					position974 := position
+					position990 := position
 					if peekChar('`') {
-						goto l987
+						goto l1003
 					}
 					if !p.rules[ruleNonspacechar]() {
-						goto l987
+						goto l1003
 					}
-				l988:
+				l1004:
 					if peekChar('`') {
-						goto l989
+						goto l1005
 					}
 					if !p.rules[ruleNonspacechar]() {
-						goto l989
+						goto l1005
 					}
-					goto l988
-				l989:
-					goto l986
-				l987:
+					goto l1004
+				l1005:
+					goto l1002
+				l1003:
 					{
 						if position == len(p.Buffer) {
-							goto l974
+							goto l990
 						}
 						switch p.Buffer[position] {
 						case '`':
 							if !p.rules[ruleTicks4]() {
-								goto l991
+								goto l1007
 							}
-							goto l974
-						l991:
+							goto l990
+						l1007:
 							if !matchChar('`') {
-								goto l974
+								goto l990
 							}
-						l992:
+						l1008:
 							if !matchChar('`') {
-								goto l993
+								goto l1009
 							}
-							goto l992
-						l993:
+							goto l1008
+						l1009:
 							break
 						default:
 							{
-								position994 := position
+								position1010 := position
 								if !p.rules[ruleSp]() {
-									goto l994
+									goto l1010
 								}
 								if !p.rules[ruleTicks4]() {
-									goto l994
+									goto l1010
 								}
-								goto l974
-							l994:
-								position = position994
+								goto l990
+							l1010:
+								position = position1010
 							}
 							{
 								if position == len(p.Buffer) {
-									goto l974
+									goto l990
 								}
 								switch p.Buffer[position] {
 								case '\n', '\r':
 									if !p.rules[ruleNewline]() {
-										goto l974
+										goto l990
 									}
 									if !p.rules[ruleBlankLine]() {
-										goto l996
+										goto l1012
 									}
-									goto l974
-								l996:
+									goto l990
+								l1012:
 									break
 								case '\t', ' ':
 									if !p.rules[ruleSpacechar]() {
-										goto l974
+										goto l990
 									}
 									break
 								default:
-									goto l974
+									goto l990
 								}
 							}
 						}
 					}
-				l986:
-					goto l973
-				l974:
-					position = position974
+				l1002:
+					goto l989
+				l990:
+					position = position990
 				}
 				end = position
 				if !p.rules[ruleSp]() {
-					goto l972
+					goto l988
 				}
 				if !p.rules[ruleTicks4]() {
-					goto l972
+					goto l988
 				}
-				goto l896
-			l972:
-				position = position896
+				goto l912
+			l988:
+				position = position912
 				if !p.rules[ruleTicks5]() {
-					goto l895
+					goto l911
 				}
 				if !p.rules[ruleSp]() {
-					goto l895
+					goto l911
 				}
 				begin = position
 				if peekChar('`') {
-					goto l1000
+					goto l1016
 				}
 				if !p.rules[ruleNonspacechar]() {
-					goto l1000
+					goto l1016
 				}
-			l1001:
+			l1017:
 				if peekChar('`') {
-					goto l1002
+					goto l1018
 				}
 				if !p.rules[ruleNonspacechar]() {
-					goto l1002
+					goto l1018
 				}
-				goto l1001
-			l1002:
-				goto l999
-			l1000:
+				goto l1017
+			l1018:
+				goto l1015
+			l1016:
 				{
 					if position == len(p.Buffer) {
-						goto l895
+						goto l911
 					}
 					switch p.Buffer[position] {
 					case '`':
 						if !p.rules[ruleTicks5]() {
-							goto l1004
+							goto l1020
 						}
-						goto l895
-					l1004:
+						goto l911
+					l1020:
 						if !matchChar('`') {
-							goto l895
+							goto l911
 						}
-					l1005:
+					l1021:
 						if !matchChar('`') {
-							goto l1006
+							goto l1022
 						}
-						goto l1005
-					l1006:
+						goto l1021
+					l1022:
 						break
 					default:
 						{
-							position1007 := position
+							position1023 := position
 							if !p.rules[ruleSp]() {
-								goto l1007
+								goto l1023
 							}
 							if !p.rules[ruleTicks5]() {
-								goto l1007
+								goto l1023
 							}
-							goto l895
-						l1007:
-							position = position1007
+							goto l911
+						l1023:
+							position = position1023
 						}
 						{
 							if position == len(p.Buffer) {
-								goto l895
+								goto l911
 							}
 							switch p.Buffer[position] {
 							case '\n', '\r':
 								if !p.rules[ruleNewline]() {
-									goto l895
+									goto l911
 								}
 								if !p.rules[ruleBlankLine]() {
-									goto l1009
+									goto l1025
 								}
-								goto l895
-							l1009:
+								goto l911
+							l1025:
 								break
 							case '\t', ' ':
 								if !p.rules[ruleSpacechar]() {
-									goto l895
+									goto l911
 								}
 								break
 							default:
-								goto l895
+								goto l911
 							}
 						}
 					}
 				}
-			l999:
-			l997:
+			l1015:
+			l1013:
 				{
-					position998 := position
+					position1014 := position
 					if peekChar('`') {
-						goto l1011
+						goto l1027
 					}
 					if !p.rules[ruleNonspacechar]() {
-						goto l1011
+						goto l1027
 					}
-				l1012:
+				l1028:
 					if peekChar('`') {
-						goto l1013
+						goto l1029
 					}
 					if !p.rules[ruleNonspacechar]() {
-						goto l1013
+						goto l1029
 					}
-					goto l1012
-				l1013:
-					goto l1010
-				l1011:
+					goto l1028
+				l1029:
+					goto l1026
+				l1027:
 					{
 						if position == len(p.Buffer) {
-							goto l998
+							goto l1014
 						}
 						switch p.Buffer[position] {
 						case '`':
 							if !p.rules[ruleTicks5]() {
-								goto l1015
+								goto l1031
 							}
-							goto l998
-						l1015:
+							goto l1014
+						l1031:
 							if !matchChar('`') {
-								goto l998
+								goto l1014
 							}
-						l1016:
+						l1032:
 							if !matchChar('`') {
-								goto l1017
+								goto l1033
 							}
-							goto l1016
-						l1017:
+							goto l1032
+						l1033:
 							break
 						default:
 							{
-								position1018 := position
+								position1034 := position
 								if !p.rules[ruleSp]() {
-									goto l1018
+									goto l1034
 								}
 								if !p.rules[ruleTicks5]() {
-									goto l1018
+									goto l1034
 								}
-								goto l998
-							l1018:
-								position = position1018
+								goto l1014
+							l1034:
+								position = position1034
 							}
 							{
 								if position == len(p.Buffer) {
-									goto l998
+									goto l1014
 								}
 								switch p.Buffer[position] {
 								case '\n', '\r':
 									if !p.rules[ruleNewline]() {
-										goto l998
+										goto l1014
 									}
 									if !p.rules[ruleBlankLine]() {
-										goto l1020
+										goto l1036
 									}
-									goto l998
-								l1020:
+									goto l1014
+								l1036:
 									break
 								case '\t', ' ':
 									if !p.rules[ruleSpacechar]() {
-										goto l998
+										goto l1014
 									}
 									break
 								default:
-									goto l998
+									goto l1014
 								}
 							}
 						}
 					}
-				l1010:
-					goto l997
-				l998:
-					position = position998
+				l1026:
+					goto l1013
+				l1014:
+					position = position1014
 				}
 				end = position
 				if !p.rules[ruleSp]() {
-					goto l895
+					goto l911
 				}
 				if !p.rules[ruleTicks5]() {
-					goto l895
+					goto l911
 				}
 			}
-		l896:
-			do(86)
+		l912:
+			do(90)
 			return true
-		l895:
+		l911:
 			position = position0
 			return false
 		},
-		/* 195 RawHtml <- (< (HtmlComment / HtmlTag) > {   if p.extension.FilterHTML {
-                    yy = mk_list(LIST, nil)
+		/* 197 RawHtml <- (< (HtmlComment / HtmlBlockScript / HtmlTag) > {   if p.extension.FilterHTML {
+                    yy = p.mkList(LIST, nil)
                 } else {
-                    yy = mk_str(yytext)
+                    yy = p.mkString(yytext)
                     yy.key = HTML
                 }
             }) */
@@ -10466,250 +10588,255 @@ func (p *yyParser) Init() {
 			position0 := position
 			begin = position
 			if !p.rules[ruleHtmlComment]() {
-				goto l1023
+				goto l1039
 			}
-			goto l1022
-		l1023:
+			goto l1038
+		l1039:
+			if !p.rules[ruleHtmlBlockScript]() {
+				goto l1040
+			}
+			goto l1038
+		l1040:
 			if !p.rules[ruleHtmlTag]() {
-				goto l1021
+				goto l1037
 			}
-		l1022:
+		l1038:
 			end = position
-			do(87)
+			do(91)
 			return true
-		l1021:
+		l1037:
 			position = position0
 			return false
 		},
-		/* 196 BlankLine <- (Sp Newline) */
+		/* 198 BlankLine <- (Sp Newline) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleSp]() {
-				goto l1024
+				goto l1041
 			}
 			if !p.rules[ruleNewline]() {
-				goto l1024
+				goto l1041
 			}
 			return true
-		l1024:
+		l1041:
 			position = position0
 			return false
 		},
-		/* 197 Quoted <- ((&[\'] ('\'' (!'\'' .)* '\'')) | (&[\"] ('"' (!'"' .)* '"'))) */
+		/* 199 Quoted <- ((&[\'] ('\'' (!'\'' .)* '\'')) | (&[\"] ('"' (!'"' .)* '"'))) */
 		func() bool {
 			position0 := position
 			{
 				if position == len(p.Buffer) {
-					goto l1025
+					goto l1042
 				}
 				switch p.Buffer[position] {
 				case '\'':
 					position++ // matchChar
-				l1027:
+				l1044:
 					if position == len(p.Buffer) {
-						goto l1028
+						goto l1045
 					}
 					switch p.Buffer[position] {
 					case '\'':
-						goto l1028
+						goto l1045
 					default:
 						position++
 					}
-					goto l1027
-				l1028:
+					goto l1044
+				l1045:
 					if !matchChar('\'') {
-						goto l1025
+						goto l1042
 					}
 					break
 				case '"':
 					position++ // matchChar
-				l1029:
+				l1046:
 					if position == len(p.Buffer) {
-						goto l1030
+						goto l1047
 					}
 					switch p.Buffer[position] {
 					case '"':
-						goto l1030
+						goto l1047
 					default:
 						position++
 					}
-					goto l1029
-				l1030:
+					goto l1046
+				l1047:
 					if !matchChar('"') {
-						goto l1025
+						goto l1042
 					}
 					break
 				default:
-					goto l1025
+					goto l1042
 				}
-			}
-			return true
-		l1025:
-			position = position0
-			return false
-		},
-		/* 198 HtmlAttribute <- (((&[\-] '-') | (&[0-9A-Za-z] [A-Za-z0-9]))+ Spnl ('=' Spnl (Quoted / (!'>' Nonspacechar)+))? Spnl) */
-		func() bool {
-			position0 := position
-			{
-				if position == len(p.Buffer) {
-					goto l1031
-				}
-				switch p.Buffer[position] {
-				case '-':
-					position++ // matchChar
-					break
-				default:
-					if !matchClass(6) {
-						goto l1031
-					}
-				}
-			}
-		l1032:
-			{
-				if position == len(p.Buffer) {
-					goto l1033
-				}
-				switch p.Buffer[position] {
-				case '-':
-					position++ // matchChar
-					break
-				default:
-					if !matchClass(6) {
-						goto l1033
-					}
-				}
-			}
-			goto l1032
-		l1033:
-			if !p.rules[ruleSpnl]() {
-				goto l1031
-			}
-			{
-				position1036 := position
-				if !matchChar('=') {
-					goto l1036
-				}
-				if !p.rules[ruleSpnl]() {
-					goto l1036
-				}
-				if !p.rules[ruleQuoted]() {
-					goto l1039
-				}
-				goto l1038
-			l1039:
-				if peekChar('>') {
-					goto l1036
-				}
-				if !p.rules[ruleNonspacechar]() {
-					goto l1036
-				}
-			l1040:
-				if peekChar('>') {
-					goto l1041
-				}
-				if !p.rules[ruleNonspacechar]() {
-					goto l1041
-				}
-				goto l1040
-			l1041:
-			l1038:
-				goto l1037
-			l1036:
-				position = position1036
-			}
-		l1037:
-			if !p.rules[ruleSpnl]() {
-				goto l1031
-			}
-			return true
-		l1031:
-			position = position0
-			return false
-		},
-		/* 199 HtmlComment <- ('<!--' (!'-->' .)* '-->') */
-		func() bool {
-			position0 := position
-			if !matchString("<!--") {
-				goto l1042
-			}
-		l1043:
-			{
-				position1044 := position
-				if !matchString("-->") {
-					goto l1045
-				}
-				goto l1044
-			l1045:
-				if !matchDot() {
-					goto l1044
-				}
-				goto l1043
-			l1044:
-				position = position1044
-			}
-			if !matchString("-->") {
-				goto l1042
 			}
 			return true
 		l1042:
 			position = position0
 			return false
 		},
-		/* 200 HtmlTag <- ('<' Spnl '/'? [A-Za-z0-9]+ Spnl HtmlAttribute* '/'? Spnl '>') */
+		/* 200 HtmlAttribute <- (((&[\-] '-') | (&[0-9A-Za-z] [A-Za-z0-9]))+ Spnl ('=' Spnl (Quoted / (!'>' Nonspacechar)+))? Spnl) */
 		func() bool {
 			position0 := position
-			if !matchChar('<') {
-				goto l1046
-			}
-			if !p.rules[ruleSpnl]() {
-				goto l1046
-			}
-			matchChar('/')
-			if !matchClass(6) {
-				goto l1046
-			}
-		l1047:
-			if !matchClass(6) {
-				goto l1048
-			}
-			goto l1047
-		l1048:
-			if !p.rules[ruleSpnl]() {
-				goto l1046
+			{
+				if position == len(p.Buffer) {
+					goto l1048
+				}
+				switch p.Buffer[position] {
+				case '-':
+					position++ // matchChar
+					break
+				default:
+					if !matchClass(6) {
+						goto l1048
+					}
+				}
 			}
 		l1049:
-			if !p.rules[ruleHtmlAttribute]() {
-				goto l1050
+			{
+				if position == len(p.Buffer) {
+					goto l1050
+				}
+				switch p.Buffer[position] {
+				case '-':
+					position++ // matchChar
+					break
+				default:
+					if !matchClass(6) {
+						goto l1050
+					}
+				}
 			}
 			goto l1049
 		l1050:
-			matchChar('/')
 			if !p.rules[ruleSpnl]() {
-				goto l1046
+				goto l1048
 			}
-			if !matchChar('>') {
-				goto l1046
+			{
+				position1053 := position
+				if !matchChar('=') {
+					goto l1053
+				}
+				if !p.rules[ruleSpnl]() {
+					goto l1053
+				}
+				if !p.rules[ruleQuoted]() {
+					goto l1056
+				}
+				goto l1055
+			l1056:
+				if peekChar('>') {
+					goto l1053
+				}
+				if !p.rules[ruleNonspacechar]() {
+					goto l1053
+				}
+			l1057:
+				if peekChar('>') {
+					goto l1058
+				}
+				if !p.rules[ruleNonspacechar]() {
+					goto l1058
+				}
+				goto l1057
+			l1058:
+			l1055:
+				goto l1054
+			l1053:
+				position = position1053
+			}
+		l1054:
+			if !p.rules[ruleSpnl]() {
+				goto l1048
 			}
 			return true
-		l1046:
+		l1048:
 			position = position0
 			return false
 		},
-		/* 201 Eof <- !. */
+		/* 201 HtmlComment <- ('<!--' (!'-->' .)* '-->') */
 		func() bool {
-			if (position < len(p.Buffer)) {
-				goto l1051
+			position0 := position
+			if !matchString("<!--") {
+				goto l1059
+			}
+		l1060:
+			{
+				position1061 := position
+				if !matchString("-->") {
+					goto l1062
+				}
+				goto l1061
+			l1062:
+				if !matchDot() {
+					goto l1061
+				}
+				goto l1060
+			l1061:
+				position = position1061
+			}
+			if !matchString("-->") {
+				goto l1059
 			}
 			return true
-		l1051:
+		l1059:
+			position = position0
 			return false
 		},
-		/* 202 Spacechar <- ((&[\t] '\t') | (&[ ] ' ')) */
+		/* 202 HtmlTag <- ('<' Spnl '/'? [A-Za-z0-9]+ Spnl HtmlAttribute* '/'? Spnl '>') */
+		func() bool {
+			position0 := position
+			if !matchChar('<') {
+				goto l1063
+			}
+			if !p.rules[ruleSpnl]() {
+				goto l1063
+			}
+			matchChar('/')
+			if !matchClass(6) {
+				goto l1063
+			}
+		l1064:
+			if !matchClass(6) {
+				goto l1065
+			}
+			goto l1064
+		l1065:
+			if !p.rules[ruleSpnl]() {
+				goto l1063
+			}
+		l1066:
+			if !p.rules[ruleHtmlAttribute]() {
+				goto l1067
+			}
+			goto l1066
+		l1067:
+			matchChar('/')
+			if !p.rules[ruleSpnl]() {
+				goto l1063
+			}
+			if !matchChar('>') {
+				goto l1063
+			}
+			return true
+		l1063:
+			position = position0
+			return false
+		},
+		/* 203 Eof <- !. */
+		func() bool {
+			if (position < len(p.Buffer)) {
+				goto l1068
+			}
+			return true
+		l1068:
+			return false
+		},
+		/* 204 Spacechar <- ((&[\t] '\t') | (&[ ] ' ')) */
 		func() bool {
 			{
 				if position == len(p.Buffer) {
-					goto l1052
+					goto l1069
 				}
 				switch p.Buffer[position] {
 				case '\t':
@@ -10719,40 +10846,40 @@ func (p *yyParser) Init() {
 					position++ // matchChar
 					break
 				default:
-					goto l1052
+					goto l1069
 				}
 			}
 			return true
-		l1052:
+		l1069:
 			return false
 		},
-		/* 203 Nonspacechar <- (!Spacechar !Newline .) */
+		/* 205 Nonspacechar <- (!Spacechar !Newline .) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleSpacechar]() {
-				goto l1055
+				goto l1072
 			}
-			goto l1054
-		l1055:
+			goto l1071
+		l1072:
 			if !p.rules[ruleNewline]() {
-				goto l1056
+				goto l1073
 			}
-			goto l1054
-		l1056:
+			goto l1071
+		l1073:
 			if !matchDot() {
-				goto l1054
+				goto l1071
 			}
 			return true
-		l1054:
+		l1071:
 			position = position0
 			return false
 		},
-		/* 204 Newline <- ((&[\r] ('\r' '\n'?)) | (&[\n] '\n')) */
+		/* 206 Newline <- ((&[\r] ('\r' '\n'?)) | (&[\n] '\n')) */
 		func() bool {
 			position0 := position
 			{
 				if position == len(p.Buffer) {
-					goto l1057
+					goto l1074
 				}
 				switch p.Buffer[position] {
 				case '\r':
@@ -10763,53 +10890,63 @@ func (p *yyParser) Init() {
 					position++ // matchChar
 					break
 				default:
-					goto l1057
+					goto l1074
 				}
 			}
 			return true
-		l1057:
+		l1074:
 			position = position0
 			return false
 		},
-		/* 205 Sp <- Spacechar* */
+		/* 207 Sp <- Spacechar* */
 		func() bool {
-		l1060:
+		l1077:
 			if !p.rules[ruleSpacechar]() {
-				goto l1061
+				goto l1078
 			}
-			goto l1060
-		l1061:
+			goto l1077
+		l1078:
 			return true
 		},
-		/* 206 Spnl <- (Sp (Newline Sp)?) */
+		/* 208 Spnl <- (Sp (Newline Sp)?) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleSp]() {
-				goto l1062
+				goto l1079
 			}
 			{
-				position1063 := position
+				position1080 := position
 				if !p.rules[ruleNewline]() {
-					goto l1063
+					goto l1080
 				}
 				if !p.rules[ruleSp]() {
-					goto l1063
+					goto l1080
 				}
-				goto l1064
-			l1063:
-				position = position1063
+				goto l1081
+			l1080:
+				position = position1080
 			}
-		l1064:
+		l1081:
 			return true
-		l1062:
+		l1079:
 			position = position0
 			return false
 		},
-		/* 207 SpecialChar <- ((&[\\] '\\') | (&[#] '#') | (&[!] '!') | (&[<] '<') | (&[\]] ']') | (&[\[] '[') | (&[&] '&') | (&[`] '`') | (&[_] '_') | (&[*] '*') | (&[\"\'\-.^] ExtendedSpecialChar)) */
+		/* 209 SpecialChar <- ('\'' / '"' / ((&[\\] '\\') | (&[#] '#') | (&[!] '!') | (&[<] '<') | (&[)] ')') | (&[(] '(') | (&[\]] ']') | (&[\[] '[') | (&[&] '&') | (&[`] '`') | (&[_] '_') | (&[*] '*') | (&[\"\'\-.^] ExtendedSpecialChar))) */
 		func() bool {
+			if !matchChar('\'') {
+				goto l1084
+			}
+			goto l1083
+		l1084:
+			if !matchChar('"') {
+				goto l1085
+			}
+			goto l1083
+		l1085:
 			{
 				if position == len(p.Buffer) {
-					goto l1065
+					goto l1082
 				}
 				switch p.Buffer[position] {
 				case '\\':
@@ -10822,6 +10959,12 @@ func (p *yyParser) Init() {
 					position++ // matchChar
 					break
 				case '<':
+					position++ // matchChar
+					break
+				case ')':
+					position++ // matchChar
+					break
+				case '(':
 					position++ // matchChar
 					break
 				case ']':
@@ -10844,62 +10987,63 @@ func (p *yyParser) Init() {
 					break
 				default:
 					if !p.rules[ruleExtendedSpecialChar]() {
-						goto l1065
+						goto l1082
 					}
 				}
 			}
+		l1083:
 			return true
-		l1065:
+		l1082:
 			return false
 		},
-		/* 208 NormalChar <- (!((&[\n\r] Newline) | (&[\t ] Spacechar) | (&[!-#&\'*\-.<\[-`] SpecialChar)) .) */
+		/* 210 NormalChar <- (!((&[\n\r] Newline) | (&[\t ] Spacechar) | (&[!-#&-*\-.<\[-`] SpecialChar)) .) */
 		func() bool {
 			position0 := position
 			{
 				if position == len(p.Buffer) {
-					goto l1068
+					goto l1088
 				}
 				switch p.Buffer[position] {
 				case '\n', '\r':
 					if !p.rules[ruleNewline]() {
-						goto l1068
+						goto l1088
 					}
 					break
 				case '\t', ' ':
 					if !p.rules[ruleSpacechar]() {
-						goto l1068
+						goto l1088
 					}
 					break
 				default:
 					if !p.rules[ruleSpecialChar]() {
-						goto l1068
+						goto l1088
 					}
 				}
 			}
-			goto l1067
-		l1068:
+			goto l1087
+		l1088:
 			if !matchDot() {
-				goto l1067
+				goto l1087
 			}
 			return true
-		l1067:
+		l1087:
 			position = position0
 			return false
 		},
-		/* 209 NonAlphanumeric <- [\000-\057\072-\100\133-\140\173-\177] */
+		/* 211 NonAlphanumeric <- [\000-\057\072-\100\133-\140\173-\177] */
 		func() bool {
 			if !matchClass(4) {
-				goto l1070
+				goto l1090
 			}
 			return true
-		l1070:
+		l1090:
 			return false
 		},
-		/* 210 Alphanumeric <- ((&[\377] '\377') | (&[\376] '\376') | (&[\375] '\375') | (&[\374] '\374') | (&[\373] '\373') | (&[\372] '\372') | (&[\371] '\371') | (&[\370] '\370') | (&[\367] '\367') | (&[\366] '\366') | (&[\365] '\365') | (&[\364] '\364') | (&[\363] '\363') | (&[\362] '\362') | (&[\361] '\361') | (&[\360] '\360') | (&[\357] '\357') | (&[\356] '\356') | (&[\355] '\355') | (&[\354] '\354') | (&[\353] '\353') | (&[\352] '\352') | (&[\351] '\351') | (&[\350] '\350') | (&[\347] '\347') | (&[\346] '\346') | (&[\345] '\345') | (&[\344] '\344') | (&[\343] '\343') | (&[\342] '\342') | (&[\341] '\341') | (&[\340] '\340') | (&[\337] '\337') | (&[\336] '\336') | (&[\335] '\335') | (&[\334] '\334') | (&[\333] '\333') | (&[\332] '\332') | (&[\331] '\331') | (&[\330] '\330') | (&[\327] '\327') | (&[\326] '\326') | (&[\325] '\325') | (&[\324] '\324') | (&[\323] '\323') | (&[\322] '\322') | (&[\321] '\321') | (&[\320] '\320') | (&[\317] '\317') | (&[\316] '\316') | (&[\315] '\315') | (&[\314] '\314') | (&[\313] '\313') | (&[\312] '\312') | (&[\311] '\311') | (&[\310] '\310') | (&[\307] '\307') | (&[\306] '\306') | (&[\305] '\305') | (&[\304] '\304') | (&[\303] '\303') | (&[\302] '\302') | (&[\301] '\301') | (&[\300] '\300') | (&[\277] '\277') | (&[\276] '\276') | (&[\275] '\275') | (&[\274] '\274') | (&[\273] '\273') | (&[\272] '\272') | (&[\271] '\271') | (&[\270] '\270') | (&[\267] '\267') | (&[\266] '\266') | (&[\265] '\265') | (&[\264] '\264') | (&[\263] '\263') | (&[\262] '\262') | (&[\261] '\261') | (&[\260] '\260') | (&[\257] '\257') | (&[\256] '\256') | (&[\255] '\255') | (&[\254] '\254') | (&[\253] '\253') | (&[\252] '\252') | (&[\251] '\251') | (&[\250] '\250') | (&[\247] '\247') | (&[\246] '\246') | (&[\245] '\245') | (&[\244] '\244') | (&[\243] '\243') | (&[\242] '\242') | (&[\241] '\241') | (&[\240] '\240') | (&[\237] '\237') | (&[\236] '\236') | (&[\235] '\235') | (&[\234] '\234') | (&[\233] '\233') | (&[\232] '\232') | (&[\231] '\231') | (&[\230] '\230') | (&[\227] '\227') | (&[\226] '\226') | (&[\225] '\225') | (&[\224] '\224') | (&[\223] '\223') | (&[\222] '\222') | (&[\221] '\221') | (&[\220] '\220') | (&[\217] '\217') | (&[\216] '\216') | (&[\215] '\215') | (&[\214] '\214') | (&[\213] '\213') | (&[\212] '\212') | (&[\211] '\211') | (&[\210] '\210') | (&[\207] '\207') | (&[\206] '\206') | (&[\205] '\205') | (&[\204] '\204') | (&[\203] '\203') | (&[\202] '\202') | (&[\201] '\201') | (&[\200] '\200') | (&[0-9A-Za-z] [0-9A-Za-z])) */
+		/* 212 Alphanumeric <- ((&[\377] '\377') | (&[\376] '\376') | (&[\375] '\375') | (&[\374] '\374') | (&[\373] '\373') | (&[\372] '\372') | (&[\371] '\371') | (&[\370] '\370') | (&[\367] '\367') | (&[\366] '\366') | (&[\365] '\365') | (&[\364] '\364') | (&[\363] '\363') | (&[\362] '\362') | (&[\361] '\361') | (&[\360] '\360') | (&[\357] '\357') | (&[\356] '\356') | (&[\355] '\355') | (&[\354] '\354') | (&[\353] '\353') | (&[\352] '\352') | (&[\351] '\351') | (&[\350] '\350') | (&[\347] '\347') | (&[\346] '\346') | (&[\345] '\345') | (&[\344] '\344') | (&[\343] '\343') | (&[\342] '\342') | (&[\341] '\341') | (&[\340] '\340') | (&[\337] '\337') | (&[\336] '\336') | (&[\335] '\335') | (&[\334] '\334') | (&[\333] '\333') | (&[\332] '\332') | (&[\331] '\331') | (&[\330] '\330') | (&[\327] '\327') | (&[\326] '\326') | (&[\325] '\325') | (&[\324] '\324') | (&[\323] '\323') | (&[\322] '\322') | (&[\321] '\321') | (&[\320] '\320') | (&[\317] '\317') | (&[\316] '\316') | (&[\315] '\315') | (&[\314] '\314') | (&[\313] '\313') | (&[\312] '\312') | (&[\311] '\311') | (&[\310] '\310') | (&[\307] '\307') | (&[\306] '\306') | (&[\305] '\305') | (&[\304] '\304') | (&[\303] '\303') | (&[\302] '\302') | (&[\301] '\301') | (&[\300] '\300') | (&[\277] '\277') | (&[\276] '\276') | (&[\275] '\275') | (&[\274] '\274') | (&[\273] '\273') | (&[\272] '\272') | (&[\271] '\271') | (&[\270] '\270') | (&[\267] '\267') | (&[\266] '\266') | (&[\265] '\265') | (&[\264] '\264') | (&[\263] '\263') | (&[\262] '\262') | (&[\261] '\261') | (&[\260] '\260') | (&[\257] '\257') | (&[\256] '\256') | (&[\255] '\255') | (&[\254] '\254') | (&[\253] '\253') | (&[\252] '\252') | (&[\251] '\251') | (&[\250] '\250') | (&[\247] '\247') | (&[\246] '\246') | (&[\245] '\245') | (&[\244] '\244') | (&[\243] '\243') | (&[\242] '\242') | (&[\241] '\241') | (&[\240] '\240') | (&[\237] '\237') | (&[\236] '\236') | (&[\235] '\235') | (&[\234] '\234') | (&[\233] '\233') | (&[\232] '\232') | (&[\231] '\231') | (&[\230] '\230') | (&[\227] '\227') | (&[\226] '\226') | (&[\225] '\225') | (&[\224] '\224') | (&[\223] '\223') | (&[\222] '\222') | (&[\221] '\221') | (&[\220] '\220') | (&[\217] '\217') | (&[\216] '\216') | (&[\215] '\215') | (&[\214] '\214') | (&[\213] '\213') | (&[\212] '\212') | (&[\211] '\211') | (&[\210] '\210') | (&[\207] '\207') | (&[\206] '\206') | (&[\205] '\205') | (&[\204] '\204') | (&[\203] '\203') | (&[\202] '\202') | (&[\201] '\201') | (&[\200] '\200') | (&[0-9A-Za-z] [0-9A-Za-z])) */
 		func() bool {
 			{
 				if position == len(p.Buffer) {
-					goto l1071
+					goto l1091
 				}
 				switch p.Buffer[position] {
 				case '\377':
@@ -11288,334 +11432,371 @@ func (p *yyParser) Init() {
 					break
 				default:
 					if !matchClass(5) {
-						goto l1071
+						goto l1091
 					}
 				}
 			}
 			return true
-		l1071:
+		l1091:
 			return false
 		},
-		/* 211 AlphanumericAscii <- [A-Za-z0-9] */
+		/* 213 AlphanumericAscii <- [A-Za-z0-9] */
 		func() bool {
 			if !matchClass(6) {
-				goto l1073
+				goto l1093
 			}
 			return true
-		l1073:
+		l1093:
 			return false
 		},
-		/* 212 Digit <- [0-9] */
+		/* 214 Digit <- [0-9] */
 		func() bool {
 			if !matchClass(0) {
-				goto l1074
+				goto l1094
 			}
 			return true
-		l1074:
+		l1094:
 			return false
 		},
-		/* 213 HexEntity <- (< '&' '#' [Xx] [0-9a-fA-F]+ ';' >) */
+		/* 215 HexEntity <- (< '&' '#' [Xx] [0-9a-fA-F]+ ';' >) */
 		func() bool {
 			position0 := position
 			begin = position
 			if !matchChar('&') {
-				goto l1075
+				goto l1095
 			}
 			if !matchChar('#') {
-				goto l1075
+				goto l1095
 			}
 			if !matchClass(7) {
-				goto l1075
+				goto l1095
 			}
 			if !matchClass(8) {
-				goto l1075
+				goto l1095
 			}
-		l1076:
+		l1096:
 			if !matchClass(8) {
-				goto l1077
+				goto l1097
 			}
-			goto l1076
-		l1077:
+			goto l1096
+		l1097:
 			if !matchChar(';') {
-				goto l1075
+				goto l1095
 			}
 			end = position
 			return true
-		l1075:
+		l1095:
 			position = position0
 			return false
 		},
-		/* 214 DecEntity <- (< '&' '#' [0-9]+ > ';' >) */
+		/* 216 DecEntity <- (< '&' '#' [0-9]+ > ';' >) */
 		func() bool {
 			position0 := position
 			begin = position
 			if !matchChar('&') {
-				goto l1078
+				goto l1098
 			}
 			if !matchChar('#') {
-				goto l1078
+				goto l1098
 			}
 			if !matchClass(0) {
-				goto l1078
+				goto l1098
 			}
-		l1079:
+		l1099:
 			if !matchClass(0) {
-				goto l1080
+				goto l1100
 			}
-			goto l1079
-		l1080:
+			goto l1099
+		l1100:
 			end = position
 			if !matchChar(';') {
-				goto l1078
+				goto l1098
 			}
 			end = position
 			return true
-		l1078:
+		l1098:
 			position = position0
 			return false
 		},
-		/* 215 CharEntity <- (< '&' [A-Za-z0-9]+ ';' >) */
+		/* 217 CharEntity <- (< '&' [A-Za-z0-9]+ ';' >) */
 		func() bool {
 			position0 := position
 			begin = position
 			if !matchChar('&') {
-				goto l1081
+				goto l1101
 			}
 			if !matchClass(6) {
-				goto l1081
+				goto l1101
 			}
-		l1082:
+		l1102:
 			if !matchClass(6) {
-				goto l1083
+				goto l1103
 			}
-			goto l1082
-		l1083:
+			goto l1102
+		l1103:
 			if !matchChar(';') {
-				goto l1081
+				goto l1101
 			}
 			end = position
 			return true
-		l1081:
+		l1101:
 			position = position0
 			return false
 		},
-		/* 216 NonindentSpace <- ('   ' / '  ' / ' ' / '') */
+		/* 218 NonindentSpace <- ('   ' / '  ' / ' ' / '') */
 		func() bool {
 			if !matchString("   ") {
-				goto l1086
+				goto l1106
 			}
-			goto l1085
-		l1086:
+			goto l1105
+		l1106:
 			if !matchString("  ") {
-				goto l1087
+				goto l1107
 			}
-			goto l1085
-		l1087:
+			goto l1105
+		l1107:
 			if !matchChar(' ') {
-				goto l1088
+				goto l1108
 			}
-			goto l1085
-		l1088:
-		l1085:
+			goto l1105
+		l1108:
+		l1105:
 			return true
 		},
-		/* 217 Indent <- ((&[ ] '    ') | (&[\t] '\t')) */
+		/* 219 Indent <- ((&[ ] '    ') | (&[\t] '\t')) */
 		func() bool {
 			{
 				if position == len(p.Buffer) {
-					goto l1089
+					goto l1109
 				}
 				switch p.Buffer[position] {
 				case ' ':
 					position++
 					if !matchString("   ") {
-						goto l1089
+						goto l1109
 					}
 					break
 				case '\t':
 					position++ // matchChar
 					break
 				default:
-					goto l1089
+					goto l1109
 				}
 			}
 			return true
-		l1089:
+		l1109:
 			return false
 		},
-		/* 218 IndentedLine <- (Indent Line) */
+		/* 220 IndentedLine <- (Indent Line) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleIndent]() {
-				goto l1091
+				goto l1111
 			}
 			if !p.rules[ruleLine]() {
-				goto l1091
+				goto l1111
 			}
 			return true
-		l1091:
+		l1111:
 			position = position0
 			return false
 		},
-		/* 219 OptionallyIndentedLine <- (Indent? Line) */
+		/* 221 OptionallyIndentedLine <- (Indent? Line) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleIndent]() {
-				goto l1093
+				goto l1113
 			}
-		l1093:
+		l1113:
 			if !p.rules[ruleLine]() {
-				goto l1092
+				goto l1112
 			}
 			return true
-		l1092:
+		l1112:
 			position = position0
 			return false
 		},
-		/* 220 StartList <- (&. { yy = nil }) */
+		/* 222 StartList <- (&. { yy = nil }) */
 		func() bool {
 			if !(position < len(p.Buffer)) {
-				goto l1095
+				goto l1115
 			}
-			do(88)
+			do(92)
 			return true
-		l1095:
+		l1115:
 			return false
 		},
-		/* 221 Line <- (RawLine { yy = mk_str(yytext) }) */
+		/* 223 Line <- (RawLine { yy = p.mkString(yytext) }) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleRawLine]() {
-				goto l1096
+				goto l1116
 			}
-			do(89)
+			do(93)
 			return true
-		l1096:
+		l1116:
 			position = position0
 			return false
 		},
-		/* 222 RawLine <- ((< (!'\r' !'\n' .)* Newline >) / (< .+ > !.)) */
+		/* 224 RawLine <- ((< (!'\r' !'\n' .)* Newline >) / (< .+ > !.)) */
 		func() bool {
 			position0 := position
 			{
-				position1098 := position
+				position1118 := position
 				begin = position
-			l1100:
+			l1120:
 				if position == len(p.Buffer) {
-					goto l1101
+					goto l1121
 				}
 				switch p.Buffer[position] {
 				case '\r', '\n':
-					goto l1101
+					goto l1121
 				default:
 					position++
 				}
-				goto l1100
-			l1101:
+				goto l1120
+			l1121:
 				if !p.rules[ruleNewline]() {
-					goto l1099
+					goto l1119
 				}
 				end = position
-				goto l1098
-			l1099:
-				position = position1098
+				goto l1118
+			l1119:
+				position = position1118
 				begin = position
 				if !matchDot() {
-					goto l1097
+					goto l1117
 				}
-			l1102:
+			l1122:
 				if !matchDot() {
-					goto l1103
+					goto l1123
 				}
-				goto l1102
-			l1103:
+				goto l1122
+			l1123:
 				end = position
 				if (position < len(p.Buffer)) {
-					goto l1097
+					goto l1117
 				}
 			}
-		l1098:
+		l1118:
 			return true
-		l1097:
+		l1117:
 			position = position0
 			return false
 		},
-		/* 223 SkipBlock <- (((!BlankLine RawLine)+ BlankLine*) / BlankLine+) */
+		/* 225 SkipBlock <- (HtmlBlock / ((!'#' !SetextBottom1 !SetextBottom2 !BlankLine RawLine)+ BlankLine*) / BlankLine+ / RawLine) */
 		func() bool {
 			position0 := position
 			{
-				position1105 := position
-				if !p.rules[ruleBlankLine]() {
-					goto l1109
+				position1125 := position
+				if !p.rules[ruleHtmlBlock]() {
+					goto l1126
 				}
-				goto l1106
-			l1109:
+				goto l1125
+			l1126:
+				if peekChar('#') {
+					goto l1127
+				}
+				if !p.rules[ruleSetextBottom1]() {
+					goto l1130
+				}
+				goto l1127
+			l1130:
+				if !p.rules[ruleSetextBottom2]() {
+					goto l1131
+				}
+				goto l1127
+			l1131:
+				if !p.rules[ruleBlankLine]() {
+					goto l1132
+				}
+				goto l1127
+			l1132:
 				if !p.rules[ruleRawLine]() {
-					goto l1106
+					goto l1127
 				}
-			l1107:
+			l1128:
 				{
-					position1108 := position
+					position1129 := position
+					if peekChar('#') {
+						goto l1129
+					}
+					if !p.rules[ruleSetextBottom1]() {
+						goto l1133
+					}
+					goto l1129
+				l1133:
+					if !p.rules[ruleSetextBottom2]() {
+						goto l1134
+					}
+					goto l1129
+				l1134:
 					if !p.rules[ruleBlankLine]() {
-						goto l1110
+						goto l1135
 					}
-					goto l1108
-				l1110:
+					goto l1129
+				l1135:
 					if !p.rules[ruleRawLine]() {
-						goto l1108
+						goto l1129
 					}
-					goto l1107
-				l1108:
-					position = position1108
+					goto l1128
+				l1129:
+					position = position1129
 				}
-			l1111:
+			l1136:
 				if !p.rules[ruleBlankLine]() {
-					goto l1112
+					goto l1137
 				}
-				goto l1111
-			l1112:
-				goto l1105
-			l1106:
-				position = position1105
+				goto l1136
+			l1137:
+				goto l1125
+			l1127:
+				position = position1125
 				if !p.rules[ruleBlankLine]() {
-					goto l1104
+					goto l1138
 				}
-			l1113:
+			l1139:
 				if !p.rules[ruleBlankLine]() {
-					goto l1114
+					goto l1140
 				}
-				goto l1113
-			l1114:
+				goto l1139
+			l1140:
+				goto l1125
+			l1138:
+				position = position1125
+				if !p.rules[ruleRawLine]() {
+					goto l1124
+				}
 			}
-		l1105:
+		l1125:
 			return true
-		l1104:
+		l1124:
 			position = position0
 			return false
 		},
-		/* 224 ExtendedSpecialChar <- ((&[^] (&{p.extension.Notes} '^')) | (&[\"\'\-.] (&{p.extension.Smart} ((&[\"] '"') | (&[\'] '\'') | (&[\-] '-') | (&[.] '.'))))) */
+		/* 226 ExtendedSpecialChar <- ((&[^] (&{p.extension.Notes} '^')) | (&[\"\'\-.] (&{p.extension.Smart} ((&[\"] '"') | (&[\'] '\'') | (&[\-] '-') | (&[.] '.'))))) */
 		func() bool {
 			position0 := position
 			{
 				if position == len(p.Buffer) {
-					goto l1115
+					goto l1141
 				}
 				switch p.Buffer[position] {
 				case '^':
 					if !(p.extension.Notes) {
-						goto l1115
+						goto l1141
 					}
 					if !matchChar('^') {
-						goto l1115
+						goto l1141
 					}
 					break
 				default:
 					if !(p.extension.Smart) {
-						goto l1115
+						goto l1141
 					}
 					{
 						if position == len(p.Buffer) {
-							goto l1115
+							goto l1141
 						}
 						switch p.Buffer[position] {
 						case '"':
@@ -11631,801 +11812,772 @@ func (p *yyParser) Init() {
 							position++ // matchChar
 							break
 						default:
-							goto l1115
+							goto l1141
 						}
 					}
 				}
 			}
 			return true
-		l1115:
+		l1141:
 			position = position0
 			return false
 		},
-		/* 225 Smart <- (&{p.extension.Smart} (SingleQuoted / ((&[\'] Apostrophe) | (&[\"] DoubleQuoted) | (&[\-] Dash) | (&[.] Ellipsis)))) */
+		/* 227 Smart <- (&{p.extension.Smart} (SingleQuoted / ((&[\'] Apostrophe) | (&[\"] DoubleQuoted) | (&[\-] Dash) | (&[.] Ellipsis)))) */
 		func() bool {
 			if !(p.extension.Smart) {
-				goto l1118
+				goto l1144
 			}
 			if !p.rules[ruleSingleQuoted]() {
-				goto l1120
+				goto l1146
 			}
-			goto l1119
-		l1120:
+			goto l1145
+		l1146:
 			{
 				if position == len(p.Buffer) {
-					goto l1118
+					goto l1144
 				}
 				switch p.Buffer[position] {
 				case '\'':
 					if !p.rules[ruleApostrophe]() {
-						goto l1118
+						goto l1144
 					}
 					break
 				case '"':
 					if !p.rules[ruleDoubleQuoted]() {
-						goto l1118
+						goto l1144
 					}
 					break
 				case '-':
 					if !p.rules[ruleDash]() {
-						goto l1118
+						goto l1144
 					}
 					break
 				case '.':
 					if !p.rules[ruleEllipsis]() {
-						goto l1118
+						goto l1144
 					}
 					break
 				default:
-					goto l1118
+					goto l1144
 				}
 			}
-		l1119:
-			return true
-		l1118:
-			return false
-		},
-		/* 226 Apostrophe <- ('\'' { yy = mk_element(APOSTROPHE) }) */
-		func() bool {
-			position0 := position
-			if !matchChar('\'') {
-				goto l1122
-			}
-			do(90)
-			return true
-		l1122:
-			position = position0
-			return false
-		},
-		/* 227 Ellipsis <- (('...' / '. . .') { yy = mk_element(ELLIPSIS) }) */
-		func() bool {
-			position0 := position
-			if !matchString("...") {
-				goto l1125
-			}
-			goto l1124
-		l1125:
-			if !matchString(". . .") {
-				goto l1123
-			}
-		l1124:
-			do(91)
-			return true
-		l1123:
-			position = position0
-			return false
-		},
-		/* 228 Dash <- (EmDash / EnDash) */
-		func() bool {
-			if !p.rules[ruleEmDash]() {
-				goto l1128
-			}
-			goto l1127
-		l1128:
-			if !p.rules[ruleEnDash]() {
-				goto l1126
-			}
-		l1127:
-			return true
-		l1126:
-			return false
-		},
-		/* 229 EnDash <- ('-' &[0-9] { yy = mk_element(ENDASH) }) */
-		func() bool {
-			position0 := position
-			if !matchChar('-') {
-				goto l1129
-			}
-			if !peekClass(0) {
-				goto l1129
-			}
-			do(92)
-			return true
-		l1129:
-			position = position0
-			return false
-		},
-		/* 230 EmDash <- (('---' / '--') { yy = mk_element(EMDASH) }) */
-		func() bool {
-			position0 := position
-			if !matchString("---") {
-				goto l1132
-			}
-			goto l1131
-		l1132:
-			if !matchString("--") {
-				goto l1130
-			}
-		l1131:
-			do(93)
-			return true
-		l1130:
-			position = position0
-			return false
-		},
-		/* 231 SingleQuoteStart <- ('\'' ![)!\],.;:-? \t\n] !(((&[r] 're') | (&[l] 'll') | (&[v] 've') | (&[m] 'm') | (&[t] 't') | (&[s] 's')) !Alphanumeric)) */
-		func() bool {
-			position0 := position
-			if !matchChar('\'') {
-				goto l1133
-			}
-			if peekClass(9) {
-				goto l1133
-			}
-			{
-				position1134 := position
-				{
-					if position == len(p.Buffer) {
-						goto l1134
-					}
-					switch p.Buffer[position] {
-					case 'r':
-						position++ // matchString(`re`)
-						if !matchChar('e') {
-							goto l1134
-						}
-						break
-					case 'l':
-						position++ // matchString(`ll`)
-						if !matchChar('l') {
-							goto l1134
-						}
-						break
-					case 'v':
-						position++ // matchString(`ve`)
-						if !matchChar('e') {
-							goto l1134
-						}
-						break
-					case 'm':
-						position++ // matchChar
-						break
-					case 't':
-						position++ // matchChar
-						break
-					case 's':
-						position++ // matchChar
-						break
-					default:
-						goto l1134
-					}
-				}
-				if !p.rules[ruleAlphanumeric]() {
-					goto l1136
-				}
-				goto l1134
-			l1136:
-				goto l1133
-			l1134:
-				position = position1134
-			}
-			return true
-		l1133:
-			position = position0
-			return false
-		},
-		/* 232 SingleQuoteEnd <- ('\'' !Alphanumeric) */
-		func() bool {
-			position0 := position
-			if !matchChar('\'') {
-				goto l1137
-			}
-			if !p.rules[ruleAlphanumeric]() {
-				goto l1138
-			}
-			goto l1137
-		l1138:
-			return true
-		l1137:
-			position = position0
-			return false
-		},
-		/* 233 SingleQuoted <- (SingleQuoteStart StartList (!SingleQuoteEnd Inline { a = cons(b, a) })+ SingleQuoteEnd { yy = mk_list(SINGLEQUOTED, a) }) */
-		func() bool {
-			position0, thunkPosition0 := position, thunkPosition
-			doarg(yyPush, 2)
-			if !p.rules[ruleSingleQuoteStart]() {
-				goto l1139
-			}
-			if !p.rules[ruleStartList]() {
-				goto l1139
-			}
-			doarg(yySet, -1)
-			if !p.rules[ruleSingleQuoteEnd]() {
-				goto l1142
-			}
-			goto l1139
-		l1142:
-			if !p.rules[ruleInline]() {
-				goto l1139
-			}
-			doarg(yySet, -2)
-			do(94)
-		l1140:
-			{
-				position1141, thunkPosition1141 := position, thunkPosition
-				if !p.rules[ruleSingleQuoteEnd]() {
-					goto l1143
-				}
-				goto l1141
-			l1143:
-				if !p.rules[ruleInline]() {
-					goto l1141
-				}
-				doarg(yySet, -2)
-				do(94)
-				goto l1140
-			l1141:
-				position, thunkPosition = position1141, thunkPosition1141
-			}
-			if !p.rules[ruleSingleQuoteEnd]() {
-				goto l1139
-			}
-			do(95)
-			doarg(yyPop, 2)
-			return true
-		l1139:
-			position, thunkPosition = position0, thunkPosition0
-			return false
-		},
-		/* 234 DoubleQuoteStart <- '"' */
-		func() bool {
-			if !matchChar('"') {
-				goto l1144
-			}
+		l1145:
 			return true
 		l1144:
 			return false
 		},
-		/* 235 DoubleQuoteEnd <- '"' */
+		/* 228 Apostrophe <- ('\'' { yy = p.mkElem(APOSTROPHE) }) */
 		func() bool {
-			if !matchChar('"') {
-				goto l1145
+			position0 := position
+			if !matchChar('\'') {
+				goto l1148
 			}
+			do(94)
 			return true
-		l1145:
+		l1148:
+			position = position0
 			return false
 		},
-		/* 236 DoubleQuoted <- ('"' StartList (!'"' Inline { a = cons(b, a) })+ '"' { yy = mk_list(DOUBLEQUOTED, a) }) */
+		/* 229 Ellipsis <- (('...' / '. . .') { yy = p.mkElem(ELLIPSIS) }) */
+		func() bool {
+			position0 := position
+			if !matchString("...") {
+				goto l1151
+			}
+			goto l1150
+		l1151:
+			if !matchString(". . .") {
+				goto l1149
+			}
+		l1150:
+			do(95)
+			return true
+		l1149:
+			position = position0
+			return false
+		},
+		/* 230 Dash <- (EmDash / EnDash) */
+		func() bool {
+			if !p.rules[ruleEmDash]() {
+				goto l1154
+			}
+			goto l1153
+		l1154:
+			if !p.rules[ruleEnDash]() {
+				goto l1152
+			}
+		l1153:
+			return true
+		l1152:
+			return false
+		},
+		/* 231 EnDash <- ('-' &[0-9] { yy = p.mkElem(ENDASH) }) */
+		func() bool {
+			position0 := position
+			if !matchChar('-') {
+				goto l1155
+			}
+			if !peekClass(0) {
+				goto l1155
+			}
+			do(96)
+			return true
+		l1155:
+			position = position0
+			return false
+		},
+		/* 232 EmDash <- (('---' / '--') { yy = p.mkElem(EMDASH) }) */
+		func() bool {
+			position0 := position
+			if !matchString("---") {
+				goto l1158
+			}
+			goto l1157
+		l1158:
+			if !matchString("--") {
+				goto l1156
+			}
+		l1157:
+			do(97)
+			return true
+		l1156:
+			position = position0
+			return false
+		},
+		/* 233 SingleQuoteStart <- ('\'' !((&[\n\r] Newline) | (&[\t ] Spacechar))) */
+		func() bool {
+			position0 := position
+			if !matchChar('\'') {
+				goto l1159
+			}
+			{
+				if position == len(p.Buffer) {
+					goto l1160
+				}
+				switch p.Buffer[position] {
+				case '\n', '\r':
+					if !p.rules[ruleNewline]() {
+						goto l1160
+					}
+					break
+				case '\t', ' ':
+					if !p.rules[ruleSpacechar]() {
+						goto l1160
+					}
+					break
+				default:
+					goto l1160
+				}
+			}
+			goto l1159
+		l1160:
+			return true
+		l1159:
+			position = position0
+			return false
+		},
+		/* 234 SingleQuoteEnd <- ('\'' !Alphanumeric) */
+		func() bool {
+			position0 := position
+			if !matchChar('\'') {
+				goto l1162
+			}
+			if !p.rules[ruleAlphanumeric]() {
+				goto l1163
+			}
+			goto l1162
+		l1163:
+			return true
+		l1162:
+			position = position0
+			return false
+		},
+		/* 235 SingleQuoted <- (SingleQuoteStart StartList (!SingleQuoteEnd Inline { a = cons(b, a) })+ SingleQuoteEnd { yy = p.mkList(SINGLEQUOTED, a) }) */
+		func() bool {
+			position0, thunkPosition0 := position, thunkPosition
+			doarg(yyPush, 2)
+			if !p.rules[ruleSingleQuoteStart]() {
+				goto l1164
+			}
+			if !p.rules[ruleStartList]() {
+				goto l1164
+			}
+			doarg(yySet, -2)
+			if !p.rules[ruleSingleQuoteEnd]() {
+				goto l1167
+			}
+			goto l1164
+		l1167:
+			if !p.rules[ruleInline]() {
+				goto l1164
+			}
+			doarg(yySet, -1)
+			do(98)
+		l1165:
+			{
+				position1166, thunkPosition1166 := position, thunkPosition
+				if !p.rules[ruleSingleQuoteEnd]() {
+					goto l1168
+				}
+				goto l1166
+			l1168:
+				if !p.rules[ruleInline]() {
+					goto l1166
+				}
+				doarg(yySet, -1)
+				do(98)
+				goto l1165
+			l1166:
+				position, thunkPosition = position1166, thunkPosition1166
+			}
+			if !p.rules[ruleSingleQuoteEnd]() {
+				goto l1164
+			}
+			do(99)
+			doarg(yyPop, 2)
+			return true
+		l1164:
+			position, thunkPosition = position0, thunkPosition0
+			return false
+		},
+		/* 236 DoubleQuoteStart <- '"' */
+		func() bool {
+			if !matchChar('"') {
+				goto l1169
+			}
+			return true
+		l1169:
+			return false
+		},
+		/* 237 DoubleQuoteEnd <- '"' */
+		func() bool {
+			if !matchChar('"') {
+				goto l1170
+			}
+			return true
+		l1170:
+			return false
+		},
+		/* 238 DoubleQuoted <- ('"' StartList (!'"' Inline { a = cons(b, a) })+ '"' { yy = p.mkList(DOUBLEQUOTED, a) }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 2)
 			if !matchChar('"') {
-				goto l1146
+				goto l1171
 			}
 			if !p.rules[ruleStartList]() {
-				goto l1146
-			}
-			doarg(yySet, -1)
-			if peekChar('"') {
-				goto l1146
-			}
-			if !p.rules[ruleInline]() {
-				goto l1146
+				goto l1171
 			}
 			doarg(yySet, -2)
-			do(96)
-		l1147:
+			if peekChar('"') {
+				goto l1171
+			}
+			if !p.rules[ruleInline]() {
+				goto l1171
+			}
+			doarg(yySet, -1)
+			do(100)
+		l1172:
 			{
-				position1148, thunkPosition1148 := position, thunkPosition
+				position1173, thunkPosition1173 := position, thunkPosition
 				if peekChar('"') {
-					goto l1148
+					goto l1173
 				}
 				if !p.rules[ruleInline]() {
-					goto l1148
+					goto l1173
 				}
-				doarg(yySet, -2)
-				do(96)
-				goto l1147
-			l1148:
-				position, thunkPosition = position1148, thunkPosition1148
+				doarg(yySet, -1)
+				do(100)
+				goto l1172
+			l1173:
+				position, thunkPosition = position1173, thunkPosition1173
 			}
 			if !matchChar('"') {
-				goto l1146
+				goto l1171
 			}
-			do(97)
+			do(101)
 			doarg(yyPop, 2)
 			return true
-		l1146:
+		l1171:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 237 NoteReference <- (&{p.extension.Notes} RawNoteReference {
+		/* 239 NoteReference <- (&{p.extension.Notes} RawNoteReference {
                     if match, ok := p.find_note(ref.contents.str); ok {
-                        yy = mk_element(NOTE)
+                        yy = p.mkElem(NOTE)
                         yy.children = match.children
                         yy.contents.str = ""
                     } else {
-                        yy = mk_str("[^"+ref.contents.str+"]")
+                        yy = p.mkString("[^"+ref.contents.str+"]")
                     }
                 }) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
 			if !(p.extension.Notes) {
-				goto l1149
+				goto l1174
 			}
 			if !p.rules[ruleRawNoteReference]() {
-				goto l1149
+				goto l1174
 			}
 			doarg(yySet, -1)
-			do(98)
-			doarg(yyPop, 1)
-			return true
-		l1149:
-			position, thunkPosition = position0, thunkPosition0
-			return false
-		},
-		/* 238 RawNoteReference <- ('[^' < (!Newline !']' .)+ > ']' { yy = mk_str(yytext) }) */
-		func() bool {
-			position0 := position
-			if !matchString("[^") {
-				goto l1150
-			}
-			begin = position
-			if !p.rules[ruleNewline]() {
-				goto l1153
-			}
-			goto l1150
-		l1153:
-			if peekChar(']') {
-				goto l1150
-			}
-			if !matchDot() {
-				goto l1150
-			}
-		l1151:
-			{
-				position1152 := position
-				if !p.rules[ruleNewline]() {
-					goto l1154
-				}
-				goto l1152
-			l1154:
-				if peekChar(']') {
-					goto l1152
-				}
-				if !matchDot() {
-					goto l1152
-				}
-				goto l1151
-			l1152:
-				position = position1152
-			}
-			end = position
-			if !matchChar(']') {
-				goto l1150
-			}
-			do(99)
-			return true
-		l1150:
-			position = position0
-			return false
-		},
-		/* 239 Note <- (&{p.extension.Notes} NonindentSpace RawNoteReference ':' Sp StartList (RawNoteBlock { a = cons(yy, a) }) (&Indent RawNoteBlock { a = cons(yy, a) })* {   yy = mk_list(NOTE, a)
-                    yy.contents.str = ref.contents.str
-                }) */
-		func() bool {
-			position0, thunkPosition0 := position, thunkPosition
-			doarg(yyPush, 2)
-			if !(p.extension.Notes) {
-				goto l1155
-			}
-			if !p.rules[ruleNonindentSpace]() {
-				goto l1155
-			}
-			if !p.rules[ruleRawNoteReference]() {
-				goto l1155
-			}
-			doarg(yySet, -1)
-			if !matchChar(':') {
-				goto l1155
-			}
-			if !p.rules[ruleSp]() {
-				goto l1155
-			}
-			if !p.rules[ruleStartList]() {
-				goto l1155
-			}
-			doarg(yySet, -2)
-			if !p.rules[ruleRawNoteBlock]() {
-				goto l1155
-			}
-			do(100)
-		l1156:
-			{
-				position1157, thunkPosition1157 := position, thunkPosition
-				{
-					position1158 := position
-					if !p.rules[ruleIndent]() {
-						goto l1157
-					}
-					position = position1158
-				}
-				if !p.rules[ruleRawNoteBlock]() {
-					goto l1157
-				}
-				do(101)
-				goto l1156
-			l1157:
-				position, thunkPosition = position1157, thunkPosition1157
-			}
 			do(102)
-			doarg(yyPop, 2)
-			return true
-		l1155:
-			position, thunkPosition = position0, thunkPosition0
-			return false
-		},
-		/* 240 InlineNote <- (&{p.extension.Notes} '^[' StartList (!']' Inline { a = cons(yy, a) })+ ']' { yy = mk_list(NOTE, a)
-                  yy.contents.str = "" }) */
-		func() bool {
-			position0, thunkPosition0 := position, thunkPosition
-			doarg(yyPush, 1)
-			if !(p.extension.Notes) {
-				goto l1159
-			}
-			if !matchString("^[") {
-				goto l1159
-			}
-			if !p.rules[ruleStartList]() {
-				goto l1159
-			}
-			doarg(yySet, -1)
-			if peekChar(']') {
-				goto l1159
-			}
-			if !p.rules[ruleInline]() {
-				goto l1159
-			}
-			do(103)
-		l1160:
-			{
-				position1161 := position
-				if peekChar(']') {
-					goto l1161
-				}
-				if !p.rules[ruleInline]() {
-					goto l1161
-				}
-				do(103)
-				goto l1160
-			l1161:
-				position = position1161
-			}
-			if !matchChar(']') {
-				goto l1159
-			}
-			do(104)
-			doarg(yyPop, 1)
-			return true
-		l1159:
-			position, thunkPosition = position0, thunkPosition0
-			return false
-		},
-		/* 241 Notes <- (StartList ((Note { a = cons(b, a) }) / SkipBlock)* { p.notes = reverse(a) } commit) */
-		func() bool {
-			position0, thunkPosition0 := position, thunkPosition
-			doarg(yyPush, 2)
-			if !p.rules[ruleStartList]() {
-				goto l1162
-			}
-			doarg(yySet, -1)
-		l1163:
-			{
-				position1164, thunkPosition1164 := position, thunkPosition
-				{
-					position1165, thunkPosition1165 := position, thunkPosition
-					if !p.rules[ruleNote]() {
-						goto l1166
-					}
-					doarg(yySet, -2)
-					do(105)
-					goto l1165
-				l1166:
-					position, thunkPosition = position1165, thunkPosition1165
-					if !p.rules[ruleSkipBlock]() {
-						goto l1164
-					}
-				}
-			l1165:
-				goto l1163
-			l1164:
-				position, thunkPosition = position1164, thunkPosition1164
-			}
-			do(106)
-			if !(commit(thunkPosition0)) {
-				goto l1162
-			}
-			doarg(yyPop, 2)
-			return true
-		l1162:
-			position, thunkPosition = position0, thunkPosition0
-			return false
-		},
-		/* 242 RawNoteBlock <- (StartList (!BlankLine OptionallyIndentedLine { a = cons(yy, a) })+ (< BlankLine* > { a = cons(mk_str(yytext), a) }) {   yy = mk_str_from_list(a, true)
-                    yy.key = RAW
-                }) */
-		func() bool {
-			position0, thunkPosition0 := position, thunkPosition
-			doarg(yyPush, 1)
-			if !p.rules[ruleStartList]() {
-				goto l1167
-			}
-			doarg(yySet, -1)
-			if !p.rules[ruleBlankLine]() {
-				goto l1170
-			}
-			goto l1167
-		l1170:
-			if !p.rules[ruleOptionallyIndentedLine]() {
-				goto l1167
-			}
-			do(107)
-		l1168:
-			{
-				position1169 := position
-				if !p.rules[ruleBlankLine]() {
-					goto l1171
-				}
-				goto l1169
-			l1171:
-				if !p.rules[ruleOptionallyIndentedLine]() {
-					goto l1169
-				}
-				do(107)
-				goto l1168
-			l1169:
-				position = position1169
-			}
-			begin = position
-		l1172:
-			if !p.rules[ruleBlankLine]() {
-				goto l1173
-			}
-			goto l1172
-		l1173:
-			end = position
-			do(108)
-			do(109)
-			doarg(yyPop, 1)
-			return true
-		l1167:
-			position, thunkPosition = position0, thunkPosition0
-			return false
-		},
-		/* 243 DefinitionList <- (&{p.extension.Dlists} StartList (Definition { a = cons(yy, a) })+ { yy = mk_list(DEFINITIONLIST, a) }) */
-		func() bool {
-			position0, thunkPosition0 := position, thunkPosition
-			doarg(yyPush, 1)
-			if !(p.extension.Dlists) {
-				goto l1174
-			}
-			if !p.rules[ruleStartList]() {
-				goto l1174
-			}
-			doarg(yySet, -1)
-			if !p.rules[ruleDefinition]() {
-				goto l1174
-			}
-			do(110)
-		l1175:
-			{
-				position1176, thunkPosition1176 := position, thunkPosition
-				if !p.rules[ruleDefinition]() {
-					goto l1176
-				}
-				do(110)
-				goto l1175
-			l1176:
-				position, thunkPosition = position1176, thunkPosition1176
-			}
-			do(111)
 			doarg(yyPop, 1)
 			return true
 		l1174:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 244 Definition <- (&(NonindentSpace !Defmark Nonspacechar RawLine BlankLine? Defmark) StartList (DListTitle { a = cons(yy, a) })+ (DefTight / DefLoose) {
-				for e := yy.children; e != nil; e = e.next {
-					e.key = DEFDATA
-				}
-				a = cons(yy, a)
-			} { yy = mk_list(LIST, a) }) */
+		/* 240 RawNoteReference <- ('[^' < (!Newline !']' .)+ > ']' { yy = p.mkString(yytext) }) */
 		func() bool {
-			position0, thunkPosition0 := position, thunkPosition
-			doarg(yyPush, 1)
+			position0 := position
+			if !matchString("[^") {
+				goto l1175
+			}
+			begin = position
+			if !p.rules[ruleNewline]() {
+				goto l1178
+			}
+			goto l1175
+		l1178:
+			if peekChar(']') {
+				goto l1175
+			}
+			if !matchDot() {
+				goto l1175
+			}
+		l1176:
 			{
-				position1178 := position
-				if !p.rules[ruleNonindentSpace]() {
-					goto l1177
-				}
-				if !p.rules[ruleDefmark]() {
+				position1177 := position
+				if !p.rules[ruleNewline]() {
 					goto l1179
 				}
 				goto l1177
 			l1179:
-				if !p.rules[ruleNonspacechar]() {
+				if peekChar(']') {
 					goto l1177
 				}
-				if !p.rules[ruleRawLine]() {
+				if !matchDot() {
 					goto l1177
 				}
-				if !p.rules[ruleBlankLine]() {
-					goto l1180
-				}
-			l1180:
-				if !p.rules[ruleDefmark]() {
-					goto l1177
-				}
-				position = position1178
+				goto l1176
+			l1177:
+				position = position1177
+			}
+			end = position
+			if !matchChar(']') {
+				goto l1175
+			}
+			do(103)
+			return true
+		l1175:
+			position = position0
+			return false
+		},
+		/* 241 Note <- (&{p.extension.Notes} NonindentSpace RawNoteReference ':' Sp StartList (RawNoteBlock { a = cons(yy, a) }) (&Indent RawNoteBlock { a = cons(yy, a) })* {   yy = p.mkList(NOTE, a)
+                    yy.contents.str = ref.contents.str
+                }) */
+		func() bool {
+			position0, thunkPosition0 := position, thunkPosition
+			doarg(yyPush, 2)
+			if !(p.extension.Notes) {
+				goto l1180
+			}
+			if !p.rules[ruleNonindentSpace]() {
+				goto l1180
+			}
+			if !p.rules[ruleRawNoteReference]() {
+				goto l1180
+			}
+			doarg(yySet, -2)
+			if !matchChar(':') {
+				goto l1180
+			}
+			if !p.rules[ruleSp]() {
+				goto l1180
 			}
 			if !p.rules[ruleStartList]() {
-				goto l1177
+				goto l1180
 			}
 			doarg(yySet, -1)
-			if !p.rules[ruleDListTitle]() {
-				goto l1177
+			if !p.rules[ruleRawNoteBlock]() {
+				goto l1180
 			}
-			do(112)
-		l1182:
+			do(104)
+		l1181:
 			{
-				position1183, thunkPosition1183 := position, thunkPosition
-				if !p.rules[ruleDListTitle]() {
-					goto l1183
+				position1182, thunkPosition1182 := position, thunkPosition
+				{
+					position1183 := position
+					if !p.rules[ruleIndent]() {
+						goto l1182
+					}
+					position = position1183
 				}
-				do(112)
-				goto l1182
-			l1183:
-				position, thunkPosition = position1183, thunkPosition1183
+				if !p.rules[ruleRawNoteBlock]() {
+					goto l1182
+				}
+				do(105)
+				goto l1181
+			l1182:
+				position, thunkPosition = position1182, thunkPosition1182
 			}
-			if !p.rules[ruleDefTight]() {
-				goto l1185
-			}
-			goto l1184
-		l1185:
-			if !p.rules[ruleDefLoose]() {
-				goto l1177
-			}
-		l1184:
-			do(113)
-			do(114)
-			doarg(yyPop, 1)
+			do(106)
+			doarg(yyPop, 2)
 			return true
-		l1177:
+		l1180:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 245 DListTitle <- (NonindentSpace !Defmark &Nonspacechar StartList (!Endline Inline { a = cons(yy, a) })+ Sp Newline {	yy = mk_list(LIST, a)
+		/* 242 InlineNote <- (&{p.extension.Notes} '^[' StartList (!']' Inline { a = cons(yy, a) })+ ']' { yy = p.mkList(NOTE, a)
+                  yy.contents.str = "" }) */
+		func() bool {
+			position0, thunkPosition0 := position, thunkPosition
+			doarg(yyPush, 1)
+			if !(p.extension.Notes) {
+				goto l1184
+			}
+			if !matchString("^[") {
+				goto l1184
+			}
+			if !p.rules[ruleStartList]() {
+				goto l1184
+			}
+			doarg(yySet, -1)
+			if peekChar(']') {
+				goto l1184
+			}
+			if !p.rules[ruleInline]() {
+				goto l1184
+			}
+			do(107)
+		l1185:
+			{
+				position1186 := position
+				if peekChar(']') {
+					goto l1186
+				}
+				if !p.rules[ruleInline]() {
+					goto l1186
+				}
+				do(107)
+				goto l1185
+			l1186:
+				position = position1186
+			}
+			if !matchChar(']') {
+				goto l1184
+			}
+			do(108)
+			doarg(yyPop, 1)
+			return true
+		l1184:
+			position, thunkPosition = position0, thunkPosition0
+			return false
+		},
+		/* 243 Notes <- (StartList ((Note { a = cons(b, a) }) / SkipBlock)* { p.notes = reverse(a) } commit) */
+		func() bool {
+			position0, thunkPosition0 := position, thunkPosition
+			doarg(yyPush, 2)
+			if !p.rules[ruleStartList]() {
+				goto l1187
+			}
+			doarg(yySet, -1)
+		l1188:
+			{
+				position1189, thunkPosition1189 := position, thunkPosition
+				{
+					position1190, thunkPosition1190 := position, thunkPosition
+					if !p.rules[ruleNote]() {
+						goto l1191
+					}
+					doarg(yySet, -2)
+					do(109)
+					goto l1190
+				l1191:
+					position, thunkPosition = position1190, thunkPosition1190
+					if !p.rules[ruleSkipBlock]() {
+						goto l1189
+					}
+				}
+			l1190:
+				goto l1188
+			l1189:
+				position, thunkPosition = position1189, thunkPosition1189
+			}
+			do(110)
+			if !(commit(thunkPosition0)) {
+				goto l1187
+			}
+			doarg(yyPop, 2)
+			return true
+		l1187:
+			position, thunkPosition = position0, thunkPosition0
+			return false
+		},
+		/* 244 RawNoteBlock <- (StartList (!BlankLine OptionallyIndentedLine { a = cons(yy, a) })+ (< BlankLine* > { a = cons(p.mkString(yytext), a) }) {   yy = p.mkStringFromList(a, true)
+                    yy.key = RAW
+                }) */
+		func() bool {
+			position0, thunkPosition0 := position, thunkPosition
+			doarg(yyPush, 1)
+			if !p.rules[ruleStartList]() {
+				goto l1192
+			}
+			doarg(yySet, -1)
+			if !p.rules[ruleBlankLine]() {
+				goto l1195
+			}
+			goto l1192
+		l1195:
+			if !p.rules[ruleOptionallyIndentedLine]() {
+				goto l1192
+			}
+			do(111)
+		l1193:
+			{
+				position1194 := position
+				if !p.rules[ruleBlankLine]() {
+					goto l1196
+				}
+				goto l1194
+			l1196:
+				if !p.rules[ruleOptionallyIndentedLine]() {
+					goto l1194
+				}
+				do(111)
+				goto l1193
+			l1194:
+				position = position1194
+			}
+			begin = position
+		l1197:
+			if !p.rules[ruleBlankLine]() {
+				goto l1198
+			}
+			goto l1197
+		l1198:
+			end = position
+			do(112)
+			do(113)
+			doarg(yyPop, 1)
+			return true
+		l1192:
+			position, thunkPosition = position0, thunkPosition0
+			return false
+		},
+		/* 245 DefinitionList <- (&{p.extension.Dlists} StartList (Definition { a = cons(yy, a) })+ { yy = p.mkList(DEFINITIONLIST, a) }) */
+		func() bool {
+			position0, thunkPosition0 := position, thunkPosition
+			doarg(yyPush, 1)
+			if !(p.extension.Dlists) {
+				goto l1199
+			}
+			if !p.rules[ruleStartList]() {
+				goto l1199
+			}
+			doarg(yySet, -1)
+			if !p.rules[ruleDefinition]() {
+				goto l1199
+			}
+			do(114)
+		l1200:
+			{
+				position1201, thunkPosition1201 := position, thunkPosition
+				if !p.rules[ruleDefinition]() {
+					goto l1201
+				}
+				do(114)
+				goto l1200
+			l1201:
+				position, thunkPosition = position1201, thunkPosition1201
+			}
+			do(115)
+			doarg(yyPop, 1)
+			return true
+		l1199:
+			position, thunkPosition = position0, thunkPosition0
+			return false
+		},
+		/* 246 Definition <- (&(NonindentSpace !Defmark Nonspacechar RawLine BlankLine? Defmark) StartList (DListTitle { a = cons(yy, a) })+ (DefTight / DefLoose) {
+				for e := yy.children; e != nil; e = e.next {
+					e.key = DEFDATA
+				}
+				a = cons(yy, a)
+			} { yy = p.mkList(LIST, a) }) */
+		func() bool {
+			position0, thunkPosition0 := position, thunkPosition
+			doarg(yyPush, 1)
+			{
+				position1203 := position
+				if !p.rules[ruleNonindentSpace]() {
+					goto l1202
+				}
+				if !p.rules[ruleDefmark]() {
+					goto l1204
+				}
+				goto l1202
+			l1204:
+				if !p.rules[ruleNonspacechar]() {
+					goto l1202
+				}
+				if !p.rules[ruleRawLine]() {
+					goto l1202
+				}
+				if !p.rules[ruleBlankLine]() {
+					goto l1205
+				}
+			l1205:
+				if !p.rules[ruleDefmark]() {
+					goto l1202
+				}
+				position = position1203
+			}
+			if !p.rules[ruleStartList]() {
+				goto l1202
+			}
+			doarg(yySet, -1)
+			if !p.rules[ruleDListTitle]() {
+				goto l1202
+			}
+			do(116)
+		l1207:
+			{
+				position1208, thunkPosition1208 := position, thunkPosition
+				if !p.rules[ruleDListTitle]() {
+					goto l1208
+				}
+				do(116)
+				goto l1207
+			l1208:
+				position, thunkPosition = position1208, thunkPosition1208
+			}
+			if !p.rules[ruleDefTight]() {
+				goto l1210
+			}
+			goto l1209
+		l1210:
+			if !p.rules[ruleDefLoose]() {
+				goto l1202
+			}
+		l1209:
+			do(117)
+			do(118)
+			doarg(yyPop, 1)
+			return true
+		l1202:
+			position, thunkPosition = position0, thunkPosition0
+			return false
+		},
+		/* 247 DListTitle <- (NonindentSpace !Defmark &Nonspacechar StartList (!Endline Inline { a = cons(yy, a) })+ Sp Newline {	yy = p.mkList(LIST, a)
 				yy.key = DEFTITLE
 			}) */
 		func() bool {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
 			if !p.rules[ruleNonindentSpace]() {
-				goto l1186
+				goto l1211
 			}
 			if !p.rules[ruleDefmark]() {
-				goto l1187
+				goto l1212
 			}
-			goto l1186
-		l1187:
+			goto l1211
+		l1212:
 			{
-				position1188 := position
+				position1213 := position
 				if !p.rules[ruleNonspacechar]() {
-					goto l1186
+					goto l1211
 				}
-				position = position1188
+				position = position1213
 			}
 			if !p.rules[ruleStartList]() {
-				goto l1186
+				goto l1211
 			}
 			doarg(yySet, -1)
 			if !p.rules[ruleEndline]() {
-				goto l1191
+				goto l1216
 			}
-			goto l1186
-		l1191:
+			goto l1211
+		l1216:
 			if !p.rules[ruleInline]() {
-				goto l1186
+				goto l1211
 			}
-			do(115)
-		l1189:
+			do(119)
+		l1214:
 			{
-				position1190 := position
+				position1215 := position
 				if !p.rules[ruleEndline]() {
-					goto l1192
+					goto l1217
 				}
-				goto l1190
-			l1192:
+				goto l1215
+			l1217:
 				if !p.rules[ruleInline]() {
-					goto l1190
+					goto l1215
 				}
-				do(115)
-				goto l1189
-			l1190:
-				position = position1190
+				do(119)
+				goto l1214
+			l1215:
+				position = position1215
 			}
 			if !p.rules[ruleSp]() {
-				goto l1186
+				goto l1211
 			}
 			if !p.rules[ruleNewline]() {
-				goto l1186
+				goto l1211
 			}
-			do(116)
+			do(120)
 			doarg(yyPop, 1)
 			return true
-		l1186:
+		l1211:
 			position, thunkPosition = position0, thunkPosition0
 			return false
 		},
-		/* 246 DefTight <- (&Defmark ListTight) */
+		/* 248 DefTight <- (&Defmark ListTight) */
 		func() bool {
 			{
-				position1194 := position
+				position1219 := position
 				if !p.rules[ruleDefmark]() {
-					goto l1193
+					goto l1218
 				}
-				position = position1194
+				position = position1219
 			}
 			if !p.rules[ruleListTight]() {
-				goto l1193
+				goto l1218
 			}
 			return true
-		l1193:
+		l1218:
 			return false
 		},
-		/* 247 DefLoose <- (BlankLine &Defmark ListLoose) */
+		/* 249 DefLoose <- (BlankLine &Defmark ListLoose) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleBlankLine]() {
-				goto l1195
+				goto l1220
 			}
 			{
-				position1196 := position
+				position1221 := position
 				if !p.rules[ruleDefmark]() {
-					goto l1195
+					goto l1220
 				}
-				position = position1196
+				position = position1221
 			}
 			if !p.rules[ruleListLoose]() {
-				goto l1195
+				goto l1220
 			}
 			return true
-		l1195:
+		l1220:
 			position = position0
 			return false
 		},
-		/* 248 Defmark <- (NonindentSpace ((&[~] '~') | (&[:] ':')) Spacechar+) */
+		/* 250 Defmark <- (NonindentSpace ((&[~] '~') | (&[:] ':')) Spacechar+) */
 		func() bool {
 			position0 := position
 			if !p.rules[ruleNonindentSpace]() {
-				goto l1197
+				goto l1222
 			}
 			{
 				if position == len(p.Buffer) {
-					goto l1197
+					goto l1222
 				}
 				switch p.Buffer[position] {
 				case '~':
@@ -12435,33 +12587,33 @@ func (p *yyParser) Init() {
 					position++ // matchChar
 					break
 				default:
-					goto l1197
+					goto l1222
 				}
 			}
 			if !p.rules[ruleSpacechar]() {
-				goto l1197
+				goto l1222
 			}
-		l1199:
+		l1224:
 			if !p.rules[ruleSpacechar]() {
-				goto l1200
+				goto l1225
 			}
-			goto l1199
-		l1200:
+			goto l1224
+		l1225:
 			return true
-		l1197:
+		l1222:
 			position = position0
 			return false
 		},
-		/* 249 DefMarker <- (&{p.extension.Dlists} Defmark) */
+		/* 251 DefMarker <- (&{p.extension.Dlists} Defmark) */
 		func() bool {
 			if !(p.extension.Dlists) {
-				goto l1201
+				goto l1226
 			}
 			if !p.rules[ruleDefmark]() {
-				goto l1201
+				goto l1226
 			}
 			return true
-		l1201:
+		l1226:
 			return false
 		},
 	}
@@ -12500,35 +12652,32 @@ func reverse(list *element) (new *element) {
  */
 
 
-/* mk_element - generic constructor for element
+/* p.mkElem - generic constructor for element
  */
-var elbuf []element
-var elock sync.Mutex
-
-func mk_element(key int) *element {
-	elock.Lock()
-	if len(elbuf) == 0 {
-		elbuf = make([]element, 1024)
+func (p *yyParser) mkElem(key int) *element {
+	r := p.state.heap.row
+	if len(r) == 0 {
+		r = p.state.heap.nextRow()
 	}
-	e := &elbuf[0]
-	elbuf = elbuf[1:]
-	elock.Unlock()
+	e := &r[0]
+	*e = element{}
+	p.state.heap.row = r[1:]
 	e.key = key
 	return e
 }
 
-/* mk_str - constructor for STR element
+/* p.mkString - constructor for STR element
  */
-func mk_str(s string) (result *element) {
-	result = mk_element(STR)
+func (p *yyParser) mkString(s string) (result *element) {
+	result = p.mkElem(STR)
 	result.contents.str = s
 	return
 }
 
-/* mk_str_from_list - makes STR element by concatenating a
+/* p.mkStringFromList - makes STR element by concatenating a
  * reversed list of strings, adding optional extra newline
  */
-func mk_str_from_list(list *element, extra_newline bool) (result *element) {
+func (p *yyParser) mkStringFromList(list *element, extra_newline bool) (result *element) {
 	s := ""
 	for list = reverse(list); list != nil; list = list.next {
 		s += list.contents.str
@@ -12537,25 +12686,25 @@ func mk_str_from_list(list *element, extra_newline bool) (result *element) {
 	if extra_newline {
 		s += "\n"
 	}
-	result = mk_element(STR)
+	result = p.mkElem(STR)
 	result.contents.str = s
 	return
 }
 
-/* mk_list - makes new list with key 'key' and children the reverse of 'lst'.
+/* p.mkList - makes new list with key 'key' and children the reverse of 'lst'.
  * This is designed to be used with cons to build lists in a parser action.
  * The reversing is necessary because cons adds to the head of a list.
  */
-func mk_list(key int, lst *element) (el *element) {
-	el = mk_element(key)
+func (p *yyParser) mkList(key int, lst *element) (el *element) {
+	el = p.mkElem(key)
 	el.children = reverse(lst)
 	return
 }
 
-/* mk_link - constructor for LINK element
+/* p.mkLink - constructor for LINK element
  */
-func mk_link(label *element, url, title string) (el *element) {
-	el = mk_element(LINK)
+func (p *yyParser) mkLink(label *element, url, title string) (el *element) {
+	el = p.mkElem(LINK)
 	el.contents.link = &link{label: label, url: url, title: title}
 	return
 }
