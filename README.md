@@ -2,7 +2,7 @@ This is an implementation of John Gruber's [markdown][] in
 [Go][].  It is a translation of [peg-markdown][], written by
 John MacFarlane in C, into Go.  It is using a modified version
 of Andrew J Snodgrass' PEG parser [peg][] -- now supporting
-LEG grammars --, which is itself based on the parser used
+LEG grammars --, which itself is based on the parser used
 by peg-markdown.
 
 [markdown]: http://daringfireball.net/projects/markdown/
@@ -14,15 +14,19 @@ Support for HTML output is implemented, but Groff and LaTeX
 output have not been ported. The output is identical
 to that of peg-markdown.
 
+I try to keep the grammar in sync with the C version, by
+cherry-picking relevant changes. In the commit history the
+corresponding revisions have a suffix *[jgm/peg-markdown].*
+
 A simple benchmark has been done by comparing the
-execution time of the Go binary (cmd/main.go) and the
+execution times of the Go binary (cmd/main.go) and the
 original C implementation's binary needed for processing
 a Markdown document, which had been created by
 concatenating ten [Markdown syntax descriptions][syntax].
 
   [syntax]: http://daringfireball.net/projects/markdown/syntax.text
 
-The C version is still around 1.2x faster than the Go version.
+The C version is still around 1.3x faster than the Go version.
 
 
 ## Installation
@@ -34,7 +38,26 @@ Provided you have a copy of Go 1, and git is available,
 should download and install the package according to
 your GOPATH settings.
 
-See doc.go for an example how to use the package.
+See doc.go for an example how to use the package. There has
+been an API change recently: Where you previously wrote
+
+	buf, err := ioutil.ReadAll(os.Stdin)
+	...
+	doc := markdown.Parse(string(buf), markdown.Extensions{Smart: true})
+	doc.WriteHtml(w)
+
+you would now write:
+
+	p := markdown.NewParser(&markdown.Extensions{Smart: true})
+
+	w := bufio.NewWriter(os.Stdout)
+	p.Markdown(os.Stdin, markdown.ToHTML(w))
+	w.Flush()
+
+One purpose of the change is to have a Parser that can be
+reused between invocations of the converter.
+
+---
 
 To create the command line program *markdown,* run
 
@@ -93,11 +116,10 @@ As definition item markers both `:` and `~` can be used.
 
 ## Todo
 
-*	Implement tables
-
-*	Where appropriate, use more idiomatic Go code
+*	Port tables and perhaps other extensions from [fletcher/peg-multimarkdown][mmd].
 
 ## Subdirectory Index
 
 *	cmd/markdown	– command line program `markdown`
 
+[mmd]: https://github.com/fletcher/peg-multimarkdown
