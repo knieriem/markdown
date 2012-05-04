@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	var opt markdown.Options
+	var opt markdown.Extensions
 	flag.BoolVar(&opt.Notes, "notes", false, "turn on footnote syntax")
 	flag.BoolVar(&opt.Smart, "smart", false, "turn on smart quotes, dashes, and ellipses")
 	flag.BoolVar(&opt.Dlists, "dlists", false, "support definitions lists")

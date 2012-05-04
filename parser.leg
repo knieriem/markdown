@@ -95,7 +95,7 @@ const (
 )
 
 type state struct {
-	extension		Options
+	extension		Extensions
 	heap	elemHeap
 	tree				*element	/* Results of parse. */
 	references			*element	/* List of link references found. */

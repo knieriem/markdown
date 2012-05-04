@@ -12,7 +12,7 @@ Usage example:
 	)
 
 	func main() {
-		p := markdown.NewParser(&markdown.Options{Smart: true})
+		p := markdown.NewParser(&markdown.Extensions{Smart: true})
 
 		w := bufio.NewWriter(os.Stdout)
 		p.Markdown(os.Stdin, markdown.ToHTML(w))

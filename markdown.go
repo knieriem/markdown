@@ -34,8 +34,8 @@ const (
 	needParserIfaceVersion = parserIfaceVersion_16
 )
 
-// Markdown Options:
-type Options struct {
+// Markdown Extensions.
+type Extensions struct {
 	Smart        bool
 	Notes        bool
 	FilterHTML   bool
@@ -51,10 +51,10 @@ type Parser struct {
 // NewParser creates an instance of a parser. It can be reused
 // so that stacks and buffers need not be allocated anew for
 // each Markdown call.
-func NewParser(opt *Options) (p *Parser) {
+func NewParser(x *Extensions) (p *Parser) {
 	p = new(Parser)
-	if opt != nil {
-		p.yy.state.extension = *opt
+	if x != nil {
+		p.yy.state.extension = *x
 	}
 	p.yy.Init()
 	p.yy.state.heap.init(1024)
