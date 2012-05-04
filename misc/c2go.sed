@@ -41,3 +41,9 @@ s,NULL,nil,g
 s, *\; *}, },g
 
 s,strlen(,len(,g
+
+s/mk_element/p.mkElem/
+s/mk_str_from_list/p.mkStringFromList/
+s/mk_str/p.mkString/g
+s/mk_list/p.mkList/
+s/mk_link/p.mkLink/
