@@ -1,12 +1,5 @@
 all:
-	@echo 'targets: test nuke parser clean'
-
-#
-# run MarkdownTests-1.0.3 that come with original C sources
-#
-test: package cmd orig-c-src
-	cd orig-c-src/MarkdownTest_1.0.3; \
-	./MarkdownTest.pl --script=../../cmd/markdown/markdown --tidy
+	@echo 'targets: nuke parser clean'
 
 cmd: package
 	cd cmd/markdown && go build -v
@@ -16,7 +9,6 @@ package: parser.leg.go
 
 clean:
 	go clean . ./...
-	rm -rf orig-c-src
 	rm -rf ,,prevmd ,,pmd
 	
 parser:	parser.leg.go
@@ -35,13 +27,6 @@ include $(shell go list -f '{{.Dir}}' github.com/knieriem/peg)/Make.inc
 endif
 
 
-#
-# get access to original C source files
-#
-orig-c-src:
-	hg clone git://github.com/jgm/peg-markdown.git $@
-
-
 include misc/devel.mk
 
 .PHONY: \
@@ -50,4 +35,3 @@ include misc/devel.mk
 	nuke\
 	package\
 	parser\
-	test\

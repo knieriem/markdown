@@ -11,7 +11,7 @@ by peg-markdown.
 [Go]: http://golang.org/
 
 Support for HTML output is implemented, but Groff and LaTeX
-output have not been ported. The output should be identical
+output have not been ported. The output is identical
 to that of peg-markdown.
 
 A simple benchmark has been done by comparing the
@@ -42,21 +42,16 @@ To create the command line program *markdown,* run
 
 the binary should then be available in the current directory.
 
-To run the Markdown 1.0.3 test suite, type
+To run tests, type
 
-	make test
+	go test github.com/knieriem/markdown
 
-This will download peg-markdown, in case you have Mercurial
-and the hg-git extension available, build cmd/markdown, and
-run the test suite.
+At the moment, tests are based on the .text files from the
+Markdown 1.0.3 test suite created by John Gruber, [imported from
+peg-markdown][testsuite]. The output of the conversion of these
+.text files to html is compared to the output of peg-markdown.
 
-The test suite should fail on exactly one test –
-*Ordered and unordered lists* –, for the same reason which
-applies to peg-markdown, because the grammar is the same.
-See the [original README][] for details.
-
-[original README]: https://github.com/jgm/peg-markdown/blob/master/README.markdown
-
+[testsuite]: https://github.com/jgm/peg-markdown/tree/master/MarkdownTest_1.0.3
 
 ## Development
 
@@ -66,8 +61,8 @@ when building packages and commands using the Go tool.  To make
 *markdown* installable using `go get`, `parser.leg.go` has
 been added to the VCS.
 
-`Make parser` will update `parser.leg.go` using `leg`, which
-is part of [knieriem/peg][] at github, if parser.leg has
+`Make parser` will update `parser.leg.go` using `leg` – which
+is part of [knieriem/peg][] at github –, if parser.leg has
 been changed, or if the Go file is missing. If a copy of *peg*
 is not yet present on your system, run
 

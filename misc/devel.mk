@@ -9,7 +9,7 @@ gofmt:
 diff: ,,c
 	tkdiff $< parser.leg
 
-,,c:	orig-c-src/markdown_parser.leg
+,,c:	,,pmd/markdown_parser.leg
 	sed -f misc/c2go.sed < $< > $@
 
 orig-c-src/markdown_parser.leg: orig-c-src
@@ -18,7 +18,7 @@ orig-c-src/markdown_parser.leg: orig-c-src
 bmprepare:
 	rc ./misc/bmprepare.rc
 
-benchmark: m ,,pmd ,,prevmd
+benchmark: cmd m ,,pmd ,,prevmd
 	rc ./misc/benchmark.rc
 
 
