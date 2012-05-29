@@ -81,6 +81,9 @@ func (p *Parser) Markdown(src io.Reader, f Formatter) {
 L:
 	for {
 		tree := p.parseRule(ruleDocblock, s)
+		if tree == nil {
+			break
+		}
 		s = p.yy.ResetBuffer("")
 		tree = p.processRawBlocks(tree)
 		f.FormatBlock(tree)
@@ -97,12 +100,12 @@ func (p *Parser) parseRule(rule int, s string) (tree *element) {
 	if p.yy.ResetBuffer(s) != "" {
 		log.Fatalf("Buffer not empty")
 	}
-	if err := p.yy.Parse(rule); err != nil {
-		log.Fatalln("markdown:", err)
-	}
+	err := p.yy.Parse(rule)
 	switch rule {
 	case ruleDoc, ruleDocblock:
-		tree = p.yy.state.tree
+		if err == nil {
+			tree = p.yy.state.tree
+		}
 		p.yy.state.tree = nil
 	}
 	return
