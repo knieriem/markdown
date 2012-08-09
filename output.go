@@ -53,23 +53,35 @@ func (f *htmlOut) FormatBlock(tree *element) {
 }
 func (f *htmlOut) Finish() {
 	if len(f.endNotes) != 0 {
-		f.pad(2)
+		f.sp()
 		f.printEndnotes()
 	}
 	f.WriteByte('\n')
 }
 
-// pad - add newlines if needed
+// pad - add a number of newlines, the value of the
+// argument minus the value of `padded'
+// One newline means a line break, similar to troff's .br
+// request, two newlines mean a line break plus an
+// empty line, similar to troff's .sp request
 func (h *htmlOut) pad(n int) *htmlOut {
 	for ; n > h.padded; n-- {
 		h.WriteByte('\n')
 	}
-	h.padded = n
+	h.padded = 0
 	return h
 }
 
-func (h *htmlOut) pset(n int) *htmlOut {
-	h.padded = n
+func (h *htmlOut) br() *htmlOut {
+	return h.pad(1)
+}
+
+func (h *htmlOut) sp() *htmlOut {
+	return h.pad(2)
+}
+
+func (h *htmlOut) skipPadding() *htmlOut {
+	h.padded = 2
 	return h
 }
 
@@ -130,10 +142,10 @@ func (w *htmlOut) inline(tag string, el *element) *htmlOut {
 	return w.s(tag).children(el).s("</").s(tag[1:])
 }
 func (w *htmlOut) listBlock(tag string, el *element) *htmlOut {
-	return w.pad(2).s(tag).pset(0).elist(el.children).pad(1).s("</").s(tag[1:]).pset(0)
+	return w.sp().s(tag).elist(el.children).br().s("</").s(tag[1:])
 }
 func (w *htmlOut) listItem(tag string, el *element) *htmlOut {
-	return w.pad(1).s(tag).pset(2).elist(el.children).s("</").s(tag[1:]).pset(0)
+	return w.br().s(tag).skipPadding().elist(el.children).s("</").s(tag[1:])
 }
 
 /* print a list of elements
@@ -202,17 +214,17 @@ func (w *htmlOut) elem(elt *element) *htmlOut {
 		log.Fatalf("RAW")
 	case H1, H2, H3, H4, H5, H6:
 		h := "<h" + string('1'+elt.key-H1) + ">" /* assumes H1 ... H6 are in order */
-		w.pad(2).inline(h, elt).pset(0)
+		w.sp().inline(h, elt)
 	case PLAIN:
-		w.pad(1).children(elt).pset(0)
+		w.br().children(elt)
 	case PARA:
-		w.pad(2).inline("<p>", elt).pset(0)
+		w.sp().inline("<p>", elt)
 	case HRULE:
-		w.pad(2).s("<hr />").pset(0)
+		w.sp().s("<hr />")
 	case HTMLBLOCK:
-		w.pad(2).s(elt.contents.str).pset(0)
+		w.sp().s(elt.contents.str)
 	case VERBATIM:
-		w.pad(2).s("<pre><code>").str(elt.contents.str).s("</code></pre>").pset(0)
+		w.sp().s("<pre><code>").str(elt.contents.str).s("</code></pre>")
 	case BULLETLIST:
 		w.listBlock("<ul>", elt)
 	case ORDEREDLIST:
@@ -226,7 +238,7 @@ func (w *htmlOut) elem(elt *element) *htmlOut {
 	case LISTITEM:
 		w.listItem("<li>", elt)
 	case BLOCKQUOTE:
-		w.pad(2).s("<blockquote>\n").pset(2).children(elt).pad(1).s("</blockquote>").pset(0)
+		w.sp().s("<blockquote>\n").skipPadding().children(elt).br().s("</blockquote>")
 	case REFERENCE:
 		/* Nonprinting */
 	case NOTE:
@@ -255,10 +267,10 @@ func (w *htmlOut) printEndnotes() {
 	w.s("<hr/>\n<ol id=\"notes\">")
 	for _, elt := range w.endNotes {
 		counter++
-		w.pad(1).s(fmt.Sprintf("<li id=\"fn%d\">\n", counter)).pset(2)
+		w.br().s(fmt.Sprintf("<li id=\"fn%d\">\n", counter)).skipPadding()
 		w.children(elt)
 		w.s(fmt.Sprintf(" <a href=\"#fnref%d\" title=\"Jump back to reference\">[back]</a>", counter))
-		w.pad(1).s("</li>")
+		w.br().s("</li>")
 	}
-	w.pad(1).s("</ol>")
+	w.br().s("</ol>")
 }
