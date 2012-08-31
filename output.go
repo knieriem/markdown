@@ -60,6 +60,7 @@ func (f *htmlOut) Finish() {
 		f.printEndnotes()
 	}
 	f.WriteByte('\n')
+	f.padded = 2
 }
 
 // pad - add a number of newlines, the value of the
