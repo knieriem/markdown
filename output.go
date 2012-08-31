@@ -33,9 +33,13 @@ type Writer interface {
 	WriteByte(byte) error
 }
 
-type htmlOut struct {
+type baseWriter struct {
 	Writer
-	padded    int
+	padded int
+}
+
+type htmlOut struct {
+	baseWriter
 	obfuscate bool
 
 	notenum  int
@@ -44,8 +48,7 @@ type htmlOut struct {
 
 func ToHTML(w Writer) Formatter {
 	f := new(htmlOut)
-	f.Writer = w
-	f.padded = 2
+	f.baseWriter = baseWriter{w, 2}
 	return f
 }
 func (f *htmlOut) FormatBlock(tree *element) {
@@ -64,20 +67,21 @@ func (f *htmlOut) Finish() {
 // One newline means a line break, similar to troff's .br
 // request, two newlines mean a line break plus an
 // empty line, similar to troff's .sp request
-func (h *htmlOut) pad(n int) *htmlOut {
-	for ; n > h.padded; n-- {
-		h.WriteByte('\n')
+func (w *baseWriter) pad(n int) {
+	for ; n > w.padded; n-- {
+		w.WriteByte('\n')
 	}
-	h.padded = 0
-	return h
+	w.padded = 0
 }
 
 func (h *htmlOut) br() *htmlOut {
-	return h.pad(1)
+	h.pad(1)
+	return h
 }
 
 func (h *htmlOut) sp() *htmlOut {
-	return h.pad(2)
+	h.pad(2)
+	return h
 }
 
 func (h *htmlOut) skipPadding() *htmlOut {
