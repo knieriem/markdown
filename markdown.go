@@ -62,6 +62,10 @@ func NewParser(x *Extensions) (p *Parser) {
 	return
 }
 
+// A Formatter is called repeatedly, one Markdown block at a time,
+// while the document is parsed. At the end of a document the Finish
+// method is called, which may, for example, print footnotes.
+// A Formatter can be reused.
 type Formatter interface {
 	FormatBlock(*element)
 	Finish()
