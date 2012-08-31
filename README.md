@@ -10,8 +10,8 @@ by peg-markdown.
 [peg]: https://github.com/pointlander/peg
 [Go]: http://golang.org/
 
-Support for HTML output is implemented, but Groff and LaTeX
-output have not been ported. The output is identical
+Support for HTML and groff mm output is implemented, but LaTeX
+output has not been ported. The output is identical
 to that of peg-markdown.
 
 I try to keep the grammar in sync with the C version, by

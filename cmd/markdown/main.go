@@ -9,6 +9,8 @@ import (
 	"os"
 )
 
+var format = flag.String("t", "html", "output format")
+
 func main() {
 	var opt markdown.Extensions
 	flag.BoolVar(&opt.Notes, "notes", false, "turn on footnote syntax")
@@ -37,6 +39,12 @@ func main() {
 	defer stopPProf()
 
 	w := bufio.NewWriter(os.Stdout)
-	p.Markdown(r, markdown.ToHTML(w))
+
+	switch *format {
+	case "groff-mm":
+		p.Markdown(r, markdown.ToGroffMM(w))
+	default:
+		p.Markdown(r, markdown.ToHTML(w))
+	}
 	w.Flush()
 }

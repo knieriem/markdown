@@ -3,4 +3,5 @@ pmd=../../,,pmd/markdown
 for (i in *.text) {
 	stem=`{echo $i | sed 's,.text$,,'}
 	$pmd < $i >$"stem.html
+	$pmd -t groff-mm < $i >$"stem.mm
 }

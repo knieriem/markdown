@@ -25,22 +25,28 @@ func runDirTests(dir string, t *testing.T) {
 		t.Fatal(err)
 	}
 
+	var buf bytes.Buffer
+	fHTML := ToHTML(&buf)
+	fGroff := ToGroffMM(&buf)
 	p := NewParser(nil)
 	for _, name := range names {
 		if filepath.Ext(name) != ".text" {
 			continue
 		}
-		if err = compareOutput(filepath.Join(dirPath, name), p); err != nil {
+		if err = compareOutput(&buf, fHTML, ".html", filepath.Join(dirPath, name), p); err != nil {
+			t.Error(err)
+		}
+		if err = compareOutput(&buf, fGroff, ".mm", filepath.Join(dirPath, name), p); err != nil {
 			t.Error(err)
 		}
 	}
 }
 
 // Compare the output of the C-based peg-markdown, which
-// is, for each test, available in a .html file accompanying the
-// .text file, with the output of this package's Markdown processor.
-func compareOutput(textPath string, p *Parser) (err error) {
-	var bOrig, bThis bytes.Buffer
+// is, for each test, available in either a .html or a .mm file accompanying
+// the .text file, with the output of this package's Markdown processor.
+func compareOutput(w *bytes.Buffer, f Formatter, ext string, textPath string, p *Parser) (err error) {
+	var bOrig bytes.Buffer
 
 	r, err := os.Open(textPath)
 	if err != nil {
@@ -48,22 +54,21 @@ func compareOutput(textPath string, p *Parser) (err error) {
 	}
 	defer r.Close()
 
-	bThis.Reset()
-	out := ToHTML(&bThis)
-	p.Markdown(r, out)
+	w.Reset()
+	p.Markdown(r, f)
 
-	// replace .text extension by .html
+	// replace .text extension by `ext'
 	base := textPath[:len(textPath)-len(".text")]
-	htmlPath := base + ".html"
+	refPath := base + ext
 
-	r, err = os.Open(htmlPath)
+	r, err = os.Open(refPath)
 	if err != nil {
 		return
 	}
 	defer r.Close()
 	bOrig.ReadFrom(r)
-	if bytes.Compare(bOrig.Bytes(), bThis.Bytes()) != 0 {
-		err = fmt.Errorf("test %q failed", base)
+	if bytes.Compare(bOrig.Bytes(), w.Bytes()) != 0 {
+		err = fmt.Errorf("test %q failed", refPath)
 	}
 	return
 }
