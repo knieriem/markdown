@@ -106,9 +106,9 @@ L:
 }
 
 func (p *Parser) parseRule(rule int, s string) (tree *element) {
-	_old := p.yy.ResetBuffer(s)
-	if _old != "" && if strings.Trim(_old, "\t\r\n ") != "" {
-		log.Fatalln("Buffer not empty", "["+_old+"]")
+	old := p.yy.ResetBuffer(s)
+	if old != "" && strings.Trim(old, "\r\n ") != "" {
+		log.Fatalln("Buffer not empty", "["+old+"]")
 	}
 	err := p.yy.Parse(rule)
 	switch rule {
