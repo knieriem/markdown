@@ -76,18 +76,12 @@ type Formatter interface {
 func (p *Parser) Markdown(src io.Reader, f Formatter) {
 	s := p.preformat(src)
 
-	// this should not be necessary;
-	// investigation is needed to understand
-	// why the buffer sometimes is not empty
-	p.yy.ResetBuffer("")
-
 	p.parseRule(ruleReferences, s)
 	if p.yy.extension.Notes {
 		p.parseRule(ruleNotes, s)
 	}
 	savedPos := p.yy.state.heap.Pos()
 
-L:
 	for {
 		tree := p.parseRule(ruleDocblock, s)
 		if tree == nil {
@@ -96,10 +90,6 @@ L:
 		s = p.yy.ResetBuffer("")
 		tree = p.processRawBlocks(tree)
 		f.FormatBlock(tree)
-		switch s {
-		case "", "\n", "\r\n", "\n\n", "\r\n\n", "\n\n\n", "\r\n\n\n":
-			break L
-		}
 		p.yy.state.heap.setPos(savedPos)
 	}
 	f.Finish()
