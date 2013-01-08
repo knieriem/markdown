@@ -2,6 +2,7 @@ package markdown
 
 import (
 	"bytes"
+	"strings"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -75,4 +76,25 @@ func compareOutput(w *bytes.Buffer, f Formatter, ext string, textPath string, p 
 
 func TestMarkdown103(t *testing.T) {
 	runDirTests("md1.0.3", t)
+}
+
+// This test will make the test run fail with a
+// message like "Buffer not empty" under the
+// following condition:
+//
+// There exists an unprocessed, remaining portion of the
+// input buffer after the previous parser call, which
+// consists only of whitespace.
+// This whitespace should have been ignored, but, due to
+// a bug, hasn't.
+func TestTrailingWhitespaceBug(t *testing.T) {
+	const input = `* foo
+
+    # bar
+
+* baz
+`
+	var buf bytes.Buffer
+	p := NewParser(nil)
+	p.Markdown(strings.NewReader(input), ToHTML(&buf))
 }
