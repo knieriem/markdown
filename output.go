@@ -115,7 +115,7 @@ func (w *htmlOut) str(s string) *htmlOut {
 		case '"':
 			ws = "&quot;"
 		default:
-			if o {
+			if o && r < 128 && r >= 0 {
 				if rand.Intn(2) == 0 {
 					ws = fmt.Sprintf("&#%d;", r)
 				} else {
