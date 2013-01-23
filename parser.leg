@@ -610,7 +610,6 @@ Source  = ( '<' < SourceContents > '>' | < SourceContents > )
           { $$ = p.mkString(yytext) }
 
 SourceContents = ( ( !'(' !')' !'>' Nonspacechar )+ | '(' SourceContents ')')*
-                 | ""
 
 Title = ( TitleSingle | TitleDouble | < "" > )
         { $$ = p.mkString(yytext) }
