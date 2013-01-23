@@ -96,7 +96,7 @@ func (w *htmlOut) s(s string) *htmlOut {
 	return w
 }
 
-/* print string, escaping for HTML  
+/* print string, escaping for HTML
  * If obfuscate selected, convert characters to hex or decimal entities at random
  */
 func (w *htmlOut) str(s string) *htmlOut {

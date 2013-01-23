@@ -23,8 +23,8 @@ package markdown
 import (
 	"fmt"
 	"io"
-	"strings"
 	"log"
+	"strings"
 )
 
 const (
@@ -33,29 +33,29 @@ const (
 
 // Semantic value of a parsing action.
 type element struct {
-	key	int
+	key int
 	contents
-	children	*element
-	next		*element
+	children *element
+	next     *element
 }
 
 // Information (label, URL and title) for a link.
 type link struct {
-	label	*element
-	url		string
-	title	string
+	label *element
+	url   string
+	title string
 }
 
 // Union for contents of an Element (string, list, or link).
 type contents struct {
-	str	string
+	str string
 	*link
 }
 
 // Types of semantic values returned by parsers.
 const (
-	LIST	= iota	/* A generic list of values. For ordered and bullet lists, see below. */
-	RAW				/* Raw markdown to be processed further */
+	LIST = iota /* A generic list of values. For ordered and bullet lists, see below. */
+	RAW         /* Raw markdown to be processed further */
 	SPACE
 	LINEBREAK
 	ELLIPSIS
@@ -76,7 +76,7 @@ const (
 	LISTITEM
 	BULLETLIST
 	ORDEREDLIST
-	H1	/* Code assumes that H1..6 are in order. */
+	H1 /* Code assumes that H1..6 are in order. */
 	H2
 	H3
 	H4
@@ -95,11 +95,11 @@ const (
 )
 
 type state struct {
-	extension		Extensions
-	heap	elemHeap
-	tree				*element	/* Results of parse. */
-	references			*element	/* List of link references found. */
-	notes				*element	/* List of footnotes found. */
+	extension  Extensions
+	heap       elemHeap
+	tree       *element /* Results of parse. */
+	references *element /* List of link references found. */
+	notes      *element /* List of footnotes found. */
 }
 
 %}
@@ -854,11 +854,9 @@ DefMarker	= &{ p.extension.Dlists } Defmark
 
 %%
 
-
 /*
  * List manipulation functions
  */
-
 
 /* cons - cons an element onto a list, returning pointer to new head
  */
@@ -878,13 +876,11 @@ func reverse(list *element) (new *element) {
 	return
 }
 
-
 /*
  *  Auxiliary functions for parsing actions.
  *  These make it easier to build up data structures (including lists)
  *  in the parsing actions.
  */
-
 
 /* p.mkElem - generic constructor for element
  */
@@ -943,7 +939,6 @@ func (p *yyParser) mkLink(label *element, url, title string) (el *element) {
 	return
 }
 
-
 /* match_inlines - returns true if inline lists match (case-insensitive...)
  */
 func match_inlines(l1, l2 *element) bool {
@@ -963,16 +958,15 @@ func match_inlines(l1, l2 *element) bool {
 				return false
 			}
 		case LINK, IMAGE:
-			return false	/* No links or images within links */
+			return false /* No links or images within links */
 		default:
 			log.Fatalf("match_inlines encountered unknown key = %d\n", l1.key)
 		}
 		l1 = l1.next
 		l2 = l2.next
 	}
-	return l1 == nil && l2 == nil	/* return true if both lists exhausted */
+	return l1 == nil && l2 == nil /* return true if both lists exhausted */
 }
-
 
 /* find_reference - return true if link found in references matching label.
  * 'link' is modified with the matching url and title.
@@ -987,7 +981,6 @@ func (p *yyParser) findReference(label *element) (*link, bool) {
 	return nil, false
 }
 
-
 /* find_note - return true if note found in notes matching label.
  * if found, 'result' is set to point to matched note.
  */
@@ -999,7 +992,6 @@ func (p *yyParser) find_note(label string) (*element, bool) {
 	}
 	return nil, false
 }
-
 
 /* print tree of elements, for debugging only.
  */
@@ -1027,41 +1019,41 @@ func print_tree(w io.Writer, elt *element, indent int) {
 }
 
 var keynames = [numVAL]string{
-	LIST:			"LIST",
-	RAW:			"RAW",
-	SPACE:			"SPACE",
-	LINEBREAK:		"LINEBREAK",
-	ELLIPSIS:		"ELLIPSIS",
-	EMDASH:			"EMDASH",
-	ENDASH:			"ENDASH",
-	APOSTROPHE:		"APOSTROPHE",
-	SINGLEQUOTED:	"SINGLEQUOTED",
-	DOUBLEQUOTED:	"DOUBLEQUOTED",
-	STR:			"STR",
-	LINK:			"LINK",
-	IMAGE:			"IMAGE",
-	CODE:			"CODE",
-	HTML:			"HTML",
-	EMPH:			"EMPH",
-	STRONG:			"STRONG",
-	PLAIN:			"PLAIN",
-	PARA:			"PARA",
-	LISTITEM:		"LISTITEM",
-	BULLETLIST:		"BULLETLIST",
-	ORDEREDLIST:	"ORDEREDLIST",
-	H1:				"H1",
-	H2:				"H2",
-	H3:				"H3",
-	H4:				"H4",
-	H5:				"H5",
-	H6:				"H6",
-	BLOCKQUOTE:		"BLOCKQUOTE",
-	VERBATIM:		"VERBATIM",
-	HTMLBLOCK:		"HTMLBLOCK",
-	HRULE:			"HRULE",
-	REFERENCE:		"REFERENCE",
-	NOTE:			"NOTE",
-	DEFINITIONLIST:	"DEFINITIONLIST",
-	DEFTITLE:		"DEFTITLE",
-	DEFDATA:		"DEFDATA",
+	LIST:           "LIST",
+	RAW:            "RAW",
+	SPACE:          "SPACE",
+	LINEBREAK:      "LINEBREAK",
+	ELLIPSIS:       "ELLIPSIS",
+	EMDASH:         "EMDASH",
+	ENDASH:         "ENDASH",
+	APOSTROPHE:     "APOSTROPHE",
+	SINGLEQUOTED:   "SINGLEQUOTED",
+	DOUBLEQUOTED:   "DOUBLEQUOTED",
+	STR:            "STR",
+	LINK:           "LINK",
+	IMAGE:          "IMAGE",
+	CODE:           "CODE",
+	HTML:           "HTML",
+	EMPH:           "EMPH",
+	STRONG:         "STRONG",
+	PLAIN:          "PLAIN",
+	PARA:           "PARA",
+	LISTITEM:       "LISTITEM",
+	BULLETLIST:     "BULLETLIST",
+	ORDEREDLIST:    "ORDEREDLIST",
+	H1:             "H1",
+	H2:             "H2",
+	H3:             "H3",
+	H4:             "H4",
+	H5:             "H5",
+	H6:             "H6",
+	BLOCKQUOTE:     "BLOCKQUOTE",
+	VERBATIM:       "VERBATIM",
+	HTMLBLOCK:      "HTMLBLOCK",
+	HRULE:          "HRULE",
+	REFERENCE:      "REFERENCE",
+	NOTE:           "NOTE",
+	DEFINITIONLIST: "DEFINITIONLIST",
+	DEFTITLE:       "DEFTITLE",
+	DEFDATA:        "DEFDATA",
 }

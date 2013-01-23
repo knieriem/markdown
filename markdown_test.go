@@ -2,10 +2,10 @@ package markdown
 
 import (
 	"bytes"
-	"strings"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
