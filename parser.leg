@@ -608,7 +608,7 @@ ReferenceLinkSingle =  a:Label < (Spnl "[]")? >
                            }
                        }
 
-ExplicitLink =  l:Label Spnl '(' Sp s:Source Spnl t:Title Sp ')'
+ExplicitLink =  l:Label '(' Sp s:Source Spnl t:Title Sp ')'
                 { $$ = p.mkLink(l.children, s.contents.str, t.contents.str)
                   s = nil
                   t = nil
