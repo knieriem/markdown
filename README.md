@@ -18,16 +18,8 @@ I try to keep the grammar in sync with the C version, by
 cherry-picking relevant changes. In the commit history the
 corresponding revisions have a suffix *[jgm/peg-markdown].*
 
-A simple benchmark has been done by comparing the
-execution times of the Go binary (cmd/main.go) and the
-original C implementation's binary needed for processing
-a Markdown document, which had been created by
-concatenating ten [Markdown syntax descriptions][syntax].
-
-  [syntax]: http://daringfireball.net/projects/markdown/syntax.text
-
-The C version is still around 1.3x faster than the Go version.
-
+The Markdown parser has a performance similar to that of 
+the original C version, and consumes less memory.
 
 ## Installation
 
@@ -38,24 +30,7 @@ Provided you have a copy of Go 1, and git is available,
 should download and install the package according to
 your GOPATH settings.
 
-See doc.go for an example how to use the package. There has
-been an API change recently: Where you previously wrote
-
-	buf, err := ioutil.ReadAll(os.Stdin)
-	...
-	doc := markdown.Parse(string(buf), markdown.Extensions{Smart: true})
-	doc.WriteHtml(w)
-
-you would now write:
-
-	p := markdown.NewParser(&markdown.Extensions{Smart: true})
-
-	w := bufio.NewWriter(os.Stdout)
-	p.Markdown(os.Stdin, markdown.ToHTML(w))
-	w.Flush()
-
-One purpose of the change is to have a Parser that can be
-reused between invocations of the converter.
+See doc.go for an example how to use the package.
 
 ---
 
