@@ -212,6 +212,8 @@ func (w *htmlOut) elem(elt *element) *htmlOut {
 		w.inline("<em>", elt)
 	case STRONG:
 		w.inline("<strong>", elt)
+	case STRIKE:
+		w.inline("<del>", elt)
 	case LIST:
 		w.children(elt)
 	case RAW:
