@@ -138,12 +138,12 @@ Para =      NonindentSpace a:Inlines BlankLine+
 Plain =     a:Inlines
             { $$ = a; $$.key = PLAIN }
 
-AtxInline = !Newline !(Sp? '#'* Sp Newline) Inline
+AtxInline = !Newline !(Sp '#'* Sp Newline) Inline
 
 AtxStart =  &'#' < ( "######" | "#####" | "####" | "###" | "##" | "#" ) >
             { $$ = p.mkElem(H1 + (len(yytext) - 1)) }
 
-AtxHeading = s:AtxStart Sp? a:StartList ( AtxInline { a = cons($$, a) } )+ (Sp? '#'* Sp)?  Newline
+AtxHeading = s:AtxStart Sp a:StartList ( AtxInline { a = cons($$, a) } )+ (Sp '#'* Sp)?  Newline
             { $$ = p.mkList(s.key, a)
               s = nil }
 
@@ -154,11 +154,11 @@ SetextBottom1 = '='+ Newline
 SetextBottom2 = '-'+ Newline
 
 SetextHeading1 =  &(RawLine SetextBottom1)
-                  a:StartList ( !Endline Inline { a = cons($$, a) } )+ Sp? Newline
+                  a:StartList ( !Endline Inline { a = cons($$, a) } )+ Sp Newline
                   SetextBottom1 { $$ = p.mkList(H1, a) }
 
 SetextHeading2 =  &(RawLine SetextBottom2)
-                  a:StartList ( !Endline Inline { a = cons($$, a) } )+ Sp? Newline
+                  a:StartList ( !Endline Inline { a = cons($$, a) } )+ Sp Newline
                   SetextBottom2 { $$ = p.mkList(H2, a) }
 
 Heading = SetextHeading | AtxHeading
