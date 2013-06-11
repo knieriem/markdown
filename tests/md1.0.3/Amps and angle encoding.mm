@@ -11,8 +11,8 @@ This & that.
 .P
 Here's a link (http://example.com/?foo=1&bar=2) with an ampersand in the URL.
 .P
-Here's a link with an amersand in the link text: AT&T (http://att.com/).
+Here's a link with an amersand in the link text: AT&T (http://att.com/)\[char46]
 .P
-Here's an inline link (/script?foo=1&bar=2).
+Here's an inline link (/script?foo=1&bar=2)\[char46]
 .P
-Here's an inline link (/script?foo=1&bar=2).
+Here's an inline link (/script?foo=1&bar=2)\[char46]

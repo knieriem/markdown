@@ -1,8 +1,8 @@
 .P
-This is the simple case (/simple).
+This is the simple case (/simple)\[char46]
 .P
 This one has a line
-break (/foo).
+break (/foo)\[char46]
 .P
 This one has a line
 break (/foo) with a line-ending space.

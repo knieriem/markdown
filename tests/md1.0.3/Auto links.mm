@@ -1,5 +1,5 @@
 .P
-Link: http://example.com/ (http://example.com/).
+Link: http://example.com/ (http://example.com/)\[char46]
 .P
 With an ampersand: http://example.com/?foo=1&bar=2 (http://example.com/?foo=1&bar=2)
 .BL

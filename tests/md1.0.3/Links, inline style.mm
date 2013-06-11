@@ -1,12 +1,12 @@
 .P
-Just a URL (/url/).
+Just a URL (/url/)\[char46]
 .P
-URL and title (/url/).
+URL and title (/url/)\[char46]
 .P
-URL and title (/url/).
+URL and title (/url/)\[char46]
 .P
-URL and title (/url/).
+URL and title (/url/)\[char46]
 .P
-URL and title (/url/).
+URL and title (/url/)\[char46]
 .P
-Empty ().
+Empty ()\[char46]

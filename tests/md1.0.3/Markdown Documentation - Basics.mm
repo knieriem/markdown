@@ -13,7 +13,7 @@ web application that allows you type your own Markdown-formatted text
 and translate it to XHTML.
 .P
 \fBNote:\fR This document is itself written using Markdown; you
-can see the source for it by adding '.text' to the URL (/projects/markdown/basics.text).
+can see the source for it by adding '\[char46]text' to the URL (/projects/markdown/basics.text)\[char46]
 .H 2 "Paragraphs, Headers, Blockquotes"
 .P
 A paragraph is simply one or more consecutive lines of text, separated
@@ -21,7 +21,7 @@ by one or more blank lines. (A blank line is any line that looks like a
 blank line -- a line containing nothing spaces or tabs is considered
 blank.) Normal paragraphs should not be intended with spaces or tabs.
 .P
-Markdown offers two styles of headers: \fISetext\fR and \fIatx\fR.
+Markdown offers two styles of headers: \fISetext\fR and \fIatx\fR\[char46]
 Setext-style headers for \fC<h1>\fR and \fC<h2>\fR are created by
 "underlining" with equal signs (\fC=\fR) and hyphens (\fC-\fR), respectively.
 To create an atx-style header, you put 1-6 hash marks (\fC#\fR) at the
@@ -171,7 +171,7 @@ Output:
 .H 3 "Links"
 .P
 Markdown supports two styles for creating links: \fIinline\fR and
-\fIreference\fR. With both styles, you use square brackets to delimit the
+\fIreference\fR\[char46] With both styles, you use square brackets to delimit the
 text you want to turn into a link.
 .P
 Inline-style links use parentheses immediately after the link text.

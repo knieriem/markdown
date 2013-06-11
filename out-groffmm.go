@@ -26,8 +26,9 @@ import (
 
 type troffOut struct {
 	baseWriter
-	inListItem bool
-	escape     *strings.Replacer
+	strikeMacroWritten bool
+	inListItem         bool
+	escape             *strings.Replacer
 }
 
 // Returns a formatter that writes the document in groff mm format.
@@ -67,6 +68,10 @@ func (w *troffOut) s(s string) *troffOut {
 
 // write string, escape '\'
 func (w *troffOut) str(s string) *troffOut {
+	if strings.HasPrefix(s, ".") {
+		w.WriteString(`\[char46]`)
+		s = s[1:]
+	}
 	w.escape.WriteString(w, s)
 	return w
 }
@@ -128,6 +133,17 @@ func (w *troffOut) elem(elt *element, isFirst bool) *troffOut {
 		w.inline(`\fI`, elt, `\fR`)
 	case STRONG:
 		w.inline(`\fB`, elt, `\fR`)
+	case STRIKE:
+		w.s("\\c\n")
+		if !w.strikeMacroWritten {
+			w.s(`.de ST
+.nr width \w'\\$1'
+\Z@\v'-.25m'\l'\\n[width]u'@\\$1\c
+..
+`)
+			w.strikeMacroWritten = true
+		}
+		w.inline(".ST \"", elt, `"`).br()
 	case LIST:
 		w.children(elt)
 	case RAW:

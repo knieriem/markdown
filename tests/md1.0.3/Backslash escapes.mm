@@ -25,7 +25,7 @@ Greater-than: >
 .P
 Hash: #
 .P
-Period: .
+Period: \[char46]
 .P
 Bang: !
 .P
@@ -113,6 +113,6 @@ _underscores_
 .P
 This is a code span with a literal backslash-backtick sequence: \fC\e`\fR
 .P
-This is a tag with unescaped backticks bar.
+This is a tag with unescaped backticks bar\[char46]
 .P
-This is a tag with backslashes bar.
+This is a tag with backslashes bar\[char46]

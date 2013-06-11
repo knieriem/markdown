@@ -49,7 +49,7 @@ Automatic Links (#autolink)
 .LE 1
 .P
 \fBNote:\fR This document is itself written using Markdown; you
-can see the source for it by adding '.text' to the URL (/projects/markdown/syntax.text).
+can see the source for it by adding '\[char46]text' to the URL (/projects/markdown/syntax.text)\[char46]
 \l'\n(.lu*8u/10u'
 .P
 Markdown is intended to be as easy-to-read and easy-to-write as is feasible.
@@ -65,7 +65,7 @@ inspiration for Markdown's syntax is the format of plain text email.
 To this end, Markdown's syntax is comprised entirely of punctuation
 characters, which punctuation characters have been carefully chosen so
 as to look like what they mean. E.g., asterisks around a word actually
-look like *emphasis*. Markdown lists look like, well, lists. Even
+look like *emphasis*\[char46] Markdown lists look like, well, lists. Even
 blockquotes look like quoted passages of text, assuming you've ever
 used email.
 .P
@@ -119,13 +119,13 @@ Unlike block-level HTML tags, Markdown syntax \fIis\fR processed within
 span-level tags.
 .P
 In HTML, there are two characters that demand special treatment: \fC<\fR
-and \fC&\fR. Left angle brackets are used to start tags; ampersands are
+and \fC&\fR\[char46] Left angle brackets are used to start tags; ampersands are
 used to denote HTML entities. If you want to use them as literal
 characters, you must escape them as entities, e.g. \fC&lt;\fR, and
-\fC&amp;\fR.
+\fC&amp;\fR\[char46]
 .P
 Ampersands in particular are bedeviling for web writers. If you want to
-write about 'AT&T', you need to write '\fCAT&amp;T\fR'. You even need to
+write about 'AT&T', you need to write '\fCAT&amp;T\fR'\[char46] You even need to
 escape ampersands within URLs. Thus, if you want to link to:
 .VERBON 2
 http://images.google.com/images?num=30&q=larry+bird
@@ -143,7 +143,7 @@ errors in otherwise well-marked-up web sites.
 Markdown allows you to use these characters naturally, taking care of
 all the necessary escaping for you. If you use an ampersand as part of
 an HTML entity, it remains unchanged; otherwise it will be translated
-into \fC&amp;\fR.
+into \fC&amp;\fR\[char46]
 .P
 So, if you want to include a copyright symbol in your article, you can write:
 .VERBON 2
@@ -198,10 +198,10 @@ Yes, this takes a tad more effort to create a \fC<br />\fR, but a simplistic
 Markdown's email-style blockquoting (#blockquote) and multi-paragraph list items (#list)
 work best -- and look better -- when you format them with hard breaks.
 .P
-Markdown supports two styles of headers, Setext (http://docutils.sourceforge.net/mirror/setext.html) and atx (http://www.aaronsw.com/2002/atx/).
+Markdown supports two styles of headers, Setext (http://docutils.sourceforge.net/mirror/setext.html) and atx (http://www.aaronsw.com/2002/atx/)\[char46]
 .P
 Setext-style headers are "underlined" using equal signs (for first-level
-headers) and dashes (for second-level headers). For example:
+headers) and dashes (for second-level headers)\[char46] For example:
 .VERBON 2
 This is an H1
 =============
@@ -502,7 +502,7 @@ end tell
 .VERBOFF
 .P
 A code block continues until it reaches a line that is not indented
-(or the end of the article).
+(or the end of the article)\[char46]
 .P
 Within a code block, ampersands (\fC&\fR) and angle brackets (\fC<\fR and \fC>\fR)
 are automatically converted into HTML entities. This makes it very
@@ -546,9 +546,9 @@ _ _ _
 .VERBOFF
 \l'\n(.lu*8u/10u'
 .P
-Markdown supports two style of links: \fIinline\fR and \fIreference\fR.
+Markdown supports two style of links: \fIinline\fR and \fIreference\fR\[char46]
 .P
-In both styles, the link text is delimited by [square brackets].
+In both styles, the link text is delimited by [square brackets]\[char46]
 .P
 To create an inline link, use a set of regular parentheses immediately
 after the link text's closing square bracket. Inside the parentheses,
@@ -753,7 +753,7 @@ escape it:
 \e*this text is surrounded by literal asterisks\e*
 .VERBOFF
 .P
-To indicate a span of code, wrap it with backtick quotes (\fC`\fR).
+To indicate a span of code, wrap it with backtick quotes (\fC`\fR)\[char46]
 Unlike a pre-formatted code block, a code span indicates code within a
 normal paragraph. For example:
 .VERBON 2
@@ -819,7 +819,7 @@ Admittedly, it's fairly difficult to devise a "natural" syntax for
 placing images into a plain text document format.
 .P
 Markdown uses an image syntax that is intended to resemble the syntax
-for links, allowing for two styles: \fIinline\fR and \fIreference\fR.
+for links, allowing for two styles: \fIinline\fR and \fIreference\fR\[char46]
 .P
 Inline image syntax looks like this:
 .VERBON 2
@@ -883,7 +883,7 @@ into something like this:
 &#109;&#x70;&#x6C;e&#x2E;&#99;&#111;&#109;</a>
 .VERBOFF
 .P
-which will render in a browser as a clickable link to "address@example.com".
+which will render in a browser as a clickable link to "address@example.com"\[char46]
 .P
 (This sort of entity-encoding trick will indeed fool many, if not
 most, address-harvesting bots, but it definitely won't fool all of

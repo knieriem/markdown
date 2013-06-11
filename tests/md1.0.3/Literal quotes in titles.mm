@@ -1,4 +1,4 @@
 .P
-Foo bar (/url/).
+Foo bar (/url/)\[char46]
 .P
-Foo bar (/url/).
+Foo bar (/url/)\[char46]
