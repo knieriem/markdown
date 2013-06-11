@@ -534,7 +534,6 @@ Symbol =    < SpecialChar >
 UlOrStarLine =  (UlLine | StarLine) { $$ = p.mkString(yytext) }
 StarLine =      < "****" '*'* > | < Spacechar '*'+ &Spacechar >
 UlLine   =      < "____" '_'* > | < Spacechar '_'+ &Spacechar >
-TildeLine =     < "~~~~" '~'* > | < Spacechar '~'+ &Spacechar >
 
 Emph =      EmphStar | EmphUl
 
@@ -574,10 +573,10 @@ TwoTildeOpen =  &{ p.extension.Strike } !TildeLine "~~" !Spacechar !Newline
 TwoTildeClose = &{ p.extension.Strike } !Spacechar !Newline a:Inline "~~" { $$ = a; }
 
 Strike = &{ p.extension.Strike }
-         TwoTildeOpen
+         "~~" !Whitespace
          a:StartList
-         ( !TwoTildeClose Inline { a = cons($$, a) } )*
-         TwoTildeClose { a = cons($$, a) }
+         ( !"~~" b:Inline { a = cons(b, a) } )+
+         "~~"
          { $$ = p.mkList(STRIKE, a) }
 
 Image = '!' ( ExplicitLink | ReferenceLink )
