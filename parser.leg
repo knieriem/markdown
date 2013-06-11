@@ -570,10 +570,11 @@ StrongUl   =    "__" !Whitespace
                 "__"
                 { $$ = p.mkList(STRONG, a) }
 
-TwoTildeOpen =  !TildeLine "~~" !Spacechar !Newline
-TwoTildeClose = !Spacechar !Newline a:Inline "~~" { $$ = a; }
+TwoTildeOpen =  &{ p.extension.Strike } !TildeLine "~~" !Spacechar !Newline
+TwoTildeClose = &{ p.extension.Strike } !Spacechar !Newline a:Inline "~~" { $$ = a; }
 
-Strike = TwoTildeOpen
+Strike = &{ p.extension.Strike }
+         TwoTildeOpen
          a:StartList
          ( !TwoTildeClose Inline { a = cons($$, a) } )*
          TwoTildeClose { a = cons($$, a) }

@@ -40,6 +40,7 @@ type Extensions struct {
 	Notes        bool
 	FilterHTML   bool
 	FilterStyles bool
+	Strike       bool
 	Dlists       bool
 }
 
