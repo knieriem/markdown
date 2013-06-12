@@ -96,6 +96,11 @@ func (p *Parser) Markdown(src io.Reader, f Formatter) {
 	f.Finish()
 }
 
+// MarkdownString is like Markdown, but takes a string argument instead of an io.Reader.
+func (p *Parser) MarkdownString(src string, f Formatter) {
+	p.Markdown(strings.NewReader(src), f)
+}
+
 func (p *Parser) parseRule(rule int, s string) (tree *element) {
 	old := p.yy.ResetBuffer(s)
 	if old != "" && strings.Trim(old, "\r\n ") != "" {
