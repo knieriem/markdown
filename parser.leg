@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	parserIfaceVersion_16 = iota
+	parserIfaceVersion_17 = iota
 )
 
 // Semantic value of a parsing action.
