@@ -2156,7 +2156,6 @@ func (p *yyParser) Init() {
 					out:
 						position = position1
 					}
-					break
 				case '-':
 					position++ // matchChar
 					if !p.rules[ruleSp]() {
@@ -2184,7 +2183,6 @@ func (p *yyParser) Init() {
 					out5:
 						position = position2
 					}
-					break
 				case '*':
 					position++ // matchChar
 					if !p.rules[ruleSp]() {
@@ -2212,7 +2210,6 @@ func (p *yyParser) Init() {
 					out7:
 						position = position3
 					}
-					break
 				default:
 					goto ko
 				}
@@ -2257,13 +2254,10 @@ func (p *yyParser) Init() {
 				switch p.Buffer[position] {
 				case '-':
 					position++ // matchChar
-					break
 				case '*':
 					position++ // matchChar
-					break
 				case '+':
 					position++ // matchChar
-					break
 				default:
 					goto ko
 				}
@@ -2347,12 +2341,10 @@ func (p *yyParser) Init() {
 					if !p.rules[ruleDefMarker]() {
 						goto ok
 					}
-					break
 				case '*', '+', '-':
 					if !p.rules[ruleBullet]() {
 						goto ok
 					}
-					break
 				default:
 					if !p.rules[ruleEnumerator]() {
 						goto ok
@@ -2436,12 +2428,10 @@ func (p *yyParser) Init() {
 					if !p.rules[ruleDefMarker]() {
 						goto ko
 					}
-					break
 				case '*', '+', '-':
 					if !p.rules[ruleBullet]() {
 						goto ko
 					}
-					break
 				default:
 					if !p.rules[ruleEnumerator]() {
 						goto ko
@@ -2493,12 +2483,10 @@ func (p *yyParser) Init() {
 					if !p.rules[ruleDefMarker]() {
 						goto ko
 					}
-					break
 				case '*', '+', '-':
 					if !p.rules[ruleBullet]() {
 						goto ko
 					}
-					break
 				default:
 					if !p.rules[ruleEnumerator]() {
 						goto ko
@@ -2707,7 +2695,6 @@ func (p *yyParser) Init() {
 						if !p.rules[ruleDefMarker]() {
 							goto ok2
 						}
-						break
 					default:
 						if !p.rules[ruleIndent]() {
 							goto ko4
@@ -2722,7 +2709,6 @@ func (p *yyParser) Init() {
 								if !p.rules[ruleBullet]() {
 									goto ok2
 								}
-								break
 							default:
 								if !p.rules[ruleEnumerator]() {
 									goto ok2
@@ -2768,13 +2754,11 @@ func (p *yyParser) Init() {
 					if !matchString("DDRESS") {
 						goto ko
 					}
-					break
 				case 'a':
 					position++
 					if !matchString("ddress") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -2819,13 +2803,11 @@ func (p *yyParser) Init() {
 					if !matchString("DDRESS") {
 						goto ko
 					}
-					break
 				case 'a':
 					position++
 					if !matchString("ddress") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -2897,13 +2879,11 @@ func (p *yyParser) Init() {
 					if !matchString("LOCKQUOTE") {
 						goto ko
 					}
-					break
 				case 'b':
 					position++
 					if !matchString("lockquote") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -2948,13 +2928,11 @@ func (p *yyParser) Init() {
 					if !matchString("LOCKQUOTE") {
 						goto ko
 					}
-					break
 				case 'b':
 					position++
 					if !matchString("lockquote") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -3026,13 +3004,11 @@ func (p *yyParser) Init() {
 					if !matchString("ENTER") {
 						goto ko
 					}
-					break
 				case 'c':
 					position++
 					if !matchString("enter") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -3077,13 +3053,11 @@ func (p *yyParser) Init() {
 					if !matchString("ENTER") {
 						goto ko
 					}
-					break
 				case 'c':
 					position++
 					if !matchString("enter") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -3155,13 +3129,11 @@ func (p *yyParser) Init() {
 					if !matchString("IR") {
 						goto ko
 					}
-					break
 				case 'd':
 					position++
 					if !matchString("ir") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -3206,13 +3178,11 @@ func (p *yyParser) Init() {
 					if !matchString("IR") {
 						goto ko
 					}
-					break
 				case 'd':
 					position++
 					if !matchString("ir") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -3284,13 +3254,11 @@ func (p *yyParser) Init() {
 					if !matchString("IV") {
 						goto ko
 					}
-					break
 				case 'd':
 					position++
 					if !matchString("iv") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -3335,13 +3303,11 @@ func (p *yyParser) Init() {
 					if !matchString("IV") {
 						goto ko
 					}
-					break
 				case 'd':
 					position++
 					if !matchString("iv") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -3413,13 +3379,11 @@ func (p *yyParser) Init() {
 					if !matchChar('L') {
 						goto ko
 					}
-					break
 				case 'd':
 					position++ // matchString(`dl`)
 					if !matchChar('l') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -3464,13 +3428,11 @@ func (p *yyParser) Init() {
 					if !matchChar('L') {
 						goto ko
 					}
-					break
 				case 'd':
 					position++ // matchString(`dl`)
 					if !matchChar('l') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -3542,13 +3504,11 @@ func (p *yyParser) Init() {
 					if !matchString("IELDSET") {
 						goto ko
 					}
-					break
 				case 'f':
 					position++
 					if !matchString("ieldset") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -3593,13 +3553,11 @@ func (p *yyParser) Init() {
 					if !matchString("IELDSET") {
 						goto ko
 					}
-					break
 				case 'f':
 					position++
 					if !matchString("ieldset") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -3671,13 +3629,11 @@ func (p *yyParser) Init() {
 					if !matchString("ORM") {
 						goto ko
 					}
-					break
 				case 'f':
 					position++
 					if !matchString("orm") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -3722,13 +3678,11 @@ func (p *yyParser) Init() {
 					if !matchString("ORM") {
 						goto ko
 					}
-					break
 				case 'f':
 					position++
 					if !matchString("orm") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -3800,13 +3754,11 @@ func (p *yyParser) Init() {
 					if !matchChar('1') {
 						goto ko
 					}
-					break
 				case 'h':
 					position++ // matchString(`h1`)
 					if !matchChar('1') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -3851,13 +3803,11 @@ func (p *yyParser) Init() {
 					if !matchChar('1') {
 						goto ko
 					}
-					break
 				case 'h':
 					position++ // matchString(`h1`)
 					if !matchChar('1') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -3929,13 +3879,11 @@ func (p *yyParser) Init() {
 					if !matchChar('2') {
 						goto ko
 					}
-					break
 				case 'h':
 					position++ // matchString(`h2`)
 					if !matchChar('2') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -3980,13 +3928,11 @@ func (p *yyParser) Init() {
 					if !matchChar('2') {
 						goto ko
 					}
-					break
 				case 'h':
 					position++ // matchString(`h2`)
 					if !matchChar('2') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -4058,13 +4004,11 @@ func (p *yyParser) Init() {
 					if !matchChar('3') {
 						goto ko
 					}
-					break
 				case 'h':
 					position++ // matchString(`h3`)
 					if !matchChar('3') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -4109,13 +4053,11 @@ func (p *yyParser) Init() {
 					if !matchChar('3') {
 						goto ko
 					}
-					break
 				case 'h':
 					position++ // matchString(`h3`)
 					if !matchChar('3') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -4187,13 +4129,11 @@ func (p *yyParser) Init() {
 					if !matchChar('4') {
 						goto ko
 					}
-					break
 				case 'h':
 					position++ // matchString(`h4`)
 					if !matchChar('4') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -4238,13 +4178,11 @@ func (p *yyParser) Init() {
 					if !matchChar('4') {
 						goto ko
 					}
-					break
 				case 'h':
 					position++ // matchString(`h4`)
 					if !matchChar('4') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -4316,13 +4254,11 @@ func (p *yyParser) Init() {
 					if !matchChar('5') {
 						goto ko
 					}
-					break
 				case 'h':
 					position++ // matchString(`h5`)
 					if !matchChar('5') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -4367,13 +4303,11 @@ func (p *yyParser) Init() {
 					if !matchChar('5') {
 						goto ko
 					}
-					break
 				case 'h':
 					position++ // matchString(`h5`)
 					if !matchChar('5') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -4445,13 +4379,11 @@ func (p *yyParser) Init() {
 					if !matchChar('6') {
 						goto ko
 					}
-					break
 				case 'h':
 					position++ // matchString(`h6`)
 					if !matchChar('6') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -4496,13 +4428,11 @@ func (p *yyParser) Init() {
 					if !matchChar('6') {
 						goto ko
 					}
-					break
 				case 'h':
 					position++ // matchString(`h6`)
 					if !matchChar('6') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -4574,13 +4504,11 @@ func (p *yyParser) Init() {
 					if !matchString("ENU") {
 						goto ko
 					}
-					break
 				case 'm':
 					position++
 					if !matchString("enu") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -4625,13 +4553,11 @@ func (p *yyParser) Init() {
 					if !matchString("ENU") {
 						goto ko
 					}
-					break
 				case 'm':
 					position++
 					if !matchString("enu") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -4703,13 +4629,11 @@ func (p *yyParser) Init() {
 					if !matchString("OFRAMES") {
 						goto ko
 					}
-					break
 				case 'n':
 					position++
 					if !matchString("oframes") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -4754,13 +4678,11 @@ func (p *yyParser) Init() {
 					if !matchString("OFRAMES") {
 						goto ko
 					}
-					break
 				case 'n':
 					position++
 					if !matchString("oframes") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -4832,13 +4754,11 @@ func (p *yyParser) Init() {
 					if !matchString("OSCRIPT") {
 						goto ko
 					}
-					break
 				case 'n':
 					position++
 					if !matchString("oscript") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -4883,13 +4803,11 @@ func (p *yyParser) Init() {
 					if !matchString("OSCRIPT") {
 						goto ko
 					}
-					break
 				case 'n':
 					position++
 					if !matchString("oscript") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -4961,13 +4879,11 @@ func (p *yyParser) Init() {
 					if !matchChar('L') {
 						goto ko
 					}
-					break
 				case 'o':
 					position++ // matchString(`ol`)
 					if !matchChar('l') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -5012,13 +4928,11 @@ func (p *yyParser) Init() {
 					if !matchChar('L') {
 						goto ko
 					}
-					break
 				case 'o':
 					position++ // matchString(`ol`)
 					if !matchChar('l') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -5087,10 +5001,8 @@ func (p *yyParser) Init() {
 				switch p.Buffer[position] {
 				case 'P':
 					position++ // matchChar
-					break
 				case 'p':
 					position++ // matchChar
-					break
 				default:
 					goto ko
 				}
@@ -5132,10 +5044,8 @@ func (p *yyParser) Init() {
 				switch p.Buffer[position] {
 				case 'P':
 					position++ // matchChar
-					break
 				case 'p':
 					position++ // matchChar
-					break
 				default:
 					goto ko
 				}
@@ -5207,13 +5117,11 @@ func (p *yyParser) Init() {
 					if !matchString("RE") {
 						goto ko
 					}
-					break
 				case 'p':
 					position++
 					if !matchString("re") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -5258,13 +5166,11 @@ func (p *yyParser) Init() {
 					if !matchString("RE") {
 						goto ko
 					}
-					break
 				case 'p':
 					position++
 					if !matchString("re") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -5336,13 +5242,11 @@ func (p *yyParser) Init() {
 					if !matchString("ABLE") {
 						goto ko
 					}
-					break
 				case 't':
 					position++
 					if !matchString("able") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -5387,13 +5291,11 @@ func (p *yyParser) Init() {
 					if !matchString("ABLE") {
 						goto ko
 					}
-					break
 				case 't':
 					position++
 					if !matchString("able") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -5465,13 +5367,11 @@ func (p *yyParser) Init() {
 					if !matchChar('L') {
 						goto ko
 					}
-					break
 				case 'u':
 					position++ // matchString(`ul`)
 					if !matchChar('l') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -5516,13 +5416,11 @@ func (p *yyParser) Init() {
 					if !matchChar('L') {
 						goto ko
 					}
-					break
 				case 'u':
 					position++ // matchString(`ul`)
 					if !matchChar('l') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -5594,13 +5492,11 @@ func (p *yyParser) Init() {
 					if !matchChar('D') {
 						goto ko
 					}
-					break
 				case 'd':
 					position++ // matchString(`dd`)
 					if !matchChar('d') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -5645,13 +5541,11 @@ func (p *yyParser) Init() {
 					if !matchChar('D') {
 						goto ko
 					}
-					break
 				case 'd':
 					position++ // matchString(`dd`)
 					if !matchChar('d') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -5723,13 +5617,11 @@ func (p *yyParser) Init() {
 					if !matchChar('T') {
 						goto ko
 					}
-					break
 				case 'd':
 					position++ // matchString(`dt`)
 					if !matchChar('t') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -5774,13 +5666,11 @@ func (p *yyParser) Init() {
 					if !matchChar('T') {
 						goto ko
 					}
-					break
 				case 'd':
 					position++ // matchString(`dt`)
 					if !matchChar('t') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -5852,13 +5742,11 @@ func (p *yyParser) Init() {
 					if !matchString("RAMESET") {
 						goto ko
 					}
-					break
 				case 'f':
 					position++
 					if !matchString("rameset") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -5903,13 +5791,11 @@ func (p *yyParser) Init() {
 					if !matchString("RAMESET") {
 						goto ko
 					}
-					break
 				case 'f':
 					position++
 					if !matchString("rameset") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -5981,13 +5867,11 @@ func (p *yyParser) Init() {
 					if !matchChar('I') {
 						goto ko
 					}
-					break
 				case 'l':
 					position++ // matchString(`li`)
 					if !matchChar('i') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -6032,13 +5916,11 @@ func (p *yyParser) Init() {
 					if !matchChar('I') {
 						goto ko
 					}
-					break
 				case 'l':
 					position++ // matchString(`li`)
 					if !matchChar('i') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -6110,13 +5992,11 @@ func (p *yyParser) Init() {
 					if !matchString("BODY") {
 						goto ko
 					}
-					break
 				case 't':
 					position++
 					if !matchString("body") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -6161,13 +6041,11 @@ func (p *yyParser) Init() {
 					if !matchString("BODY") {
 						goto ko
 					}
-					break
 				case 't':
 					position++
 					if !matchString("body") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -6239,13 +6117,11 @@ func (p *yyParser) Init() {
 					if !matchChar('D') {
 						goto ko
 					}
-					break
 				case 't':
 					position++ // matchString(`td`)
 					if !matchChar('d') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -6290,13 +6166,11 @@ func (p *yyParser) Init() {
 					if !matchChar('D') {
 						goto ko
 					}
-					break
 				case 't':
 					position++ // matchString(`td`)
 					if !matchChar('d') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -6368,13 +6242,11 @@ func (p *yyParser) Init() {
 					if !matchString("FOOT") {
 						goto ko
 					}
-					break
 				case 't':
 					position++
 					if !matchString("foot") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -6419,13 +6291,11 @@ func (p *yyParser) Init() {
 					if !matchString("FOOT") {
 						goto ko
 					}
-					break
 				case 't':
 					position++
 					if !matchString("foot") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -6497,13 +6367,11 @@ func (p *yyParser) Init() {
 					if !matchChar('H') {
 						goto ko
 					}
-					break
 				case 't':
 					position++ // matchString(`th`)
 					if !matchChar('h') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -6548,13 +6416,11 @@ func (p *yyParser) Init() {
 					if !matchChar('H') {
 						goto ko
 					}
-					break
 				case 't':
 					position++ // matchString(`th`)
 					if !matchChar('h') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -6626,13 +6492,11 @@ func (p *yyParser) Init() {
 					if !matchString("HEAD") {
 						goto ko
 					}
-					break
 				case 't':
 					position++
 					if !matchString("head") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -6677,13 +6541,11 @@ func (p *yyParser) Init() {
 					if !matchString("HEAD") {
 						goto ko
 					}
-					break
 				case 't':
 					position++
 					if !matchString("head") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -6755,13 +6617,11 @@ func (p *yyParser) Init() {
 					if !matchChar('R') {
 						goto ko
 					}
-					break
 				case 't':
 					position++ // matchString(`tr`)
 					if !matchChar('r') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -6806,13 +6666,11 @@ func (p *yyParser) Init() {
 					if !matchChar('R') {
 						goto ko
 					}
-					break
 				case 't':
 					position++ // matchString(`tr`)
 					if !matchChar('r') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -6884,13 +6742,11 @@ func (p *yyParser) Init() {
 					if !matchString("CRIPT") {
 						goto ko
 					}
-					break
 				case 's':
 					position++
 					if !matchString("cript") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -6935,13 +6791,11 @@ func (p *yyParser) Init() {
 					if !matchString("CRIPT") {
 						goto ko
 					}
-					break
 				case 's':
 					position++
 					if !matchString("cript") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -7007,13 +6861,11 @@ func (p *yyParser) Init() {
 					if !matchString("EAD") {
 						goto ko
 					}
-					break
 				case 'h':
 					position++
 					if !matchString("ead") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -7058,13 +6910,11 @@ func (p *yyParser) Init() {
 					if !matchString("EAD") {
 						goto ko
 					}
-					break
 				case 'h':
 					position++
 					if !matchString("ead") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -7577,181 +7427,151 @@ func (p *yyParser) Init() {
 					if !matchString("CRIPT") {
 						return
 					}
-					break
 				case 'T':
 					position++ // matchString(`TR`)
 					if !matchChar('R') {
 						return
 					}
-					break
 				case 'L':
 					position++ // matchString(`LI`)
 					if !matchChar('I') {
 						return
 					}
-					break
 				case 'F':
 					position++
 					if !matchString("RAMESET") {
 						return
 					}
-					break
 				case 'D':
 					position++ // matchString(`DT`)
 					if !matchChar('T') {
 						return
 					}
-					break
 				case 'U':
 					position++ // matchString(`UL`)
 					if !matchChar('L') {
 						return
 					}
-					break
 				case 'P':
 					position++
 					if !matchString("RE") {
 						return
 					}
-					break
 				case 'O':
 					position++ // matchString(`OL`)
 					if !matchChar('L') {
 						return
 					}
-					break
 				case 'N':
 					position++
 					if !matchString("OSCRIPT") {
 						return
 					}
-					break
 				case 'M':
 					position++
 					if !matchString("ENU") {
 						return
 					}
-					break
 				case 'I':
 					position++
 					if !matchString("SINDEX") {
 						return
 					}
-					break
 				case 'H':
 					position++ // matchString(`HR`)
 					if !matchChar('R') {
 						return
 					}
-					break
 				case 'C':
 					position++
 					if !matchString("ENTER") {
 						return
 					}
-					break
 				case 'B':
 					position++
 					if !matchString("LOCKQUOTE") {
 						return
 					}
-					break
 				case 'A':
 					position++
 					if !matchString("DDRESS") {
 						return
 					}
-					break
 				case 's':
 					position++
 					if !matchString("cript") {
 						return
 					}
-					break
 				case 't':
 					position++ // matchString(`tr`)
 					if !matchChar('r') {
 						return
 					}
-					break
 				case 'l':
 					position++ // matchString(`li`)
 					if !matchChar('i') {
 						return
 					}
-					break
 				case 'f':
 					position++
 					if !matchString("rameset") {
 						return
 					}
-					break
 				case 'd':
 					position++ // matchString(`dt`)
 					if !matchChar('t') {
 						return
 					}
-					break
 				case 'u':
 					position++ // matchString(`ul`)
 					if !matchChar('l') {
 						return
 					}
-					break
 				case 'p':
 					position++
 					if !matchString("re") {
 						return
 					}
-					break
 				case 'o':
 					position++ // matchString(`ol`)
 					if !matchChar('l') {
 						return
 					}
-					break
 				case 'n':
 					position++
 					if !matchString("oscript") {
 						return
 					}
-					break
 				case 'm':
 					position++
 					if !matchString("enu") {
 						return
 					}
-					break
 				case 'i':
 					position++
 					if !matchString("sindex") {
 						return
 					}
-					break
 				case 'h':
 					position++ // matchString(`hr`)
 					if !matchChar('r') {
 						return
 					}
-					break
 				case 'c':
 					position++
 					if !matchString("enter") {
 						return
 					}
-					break
 				case 'b':
 					position++
 					if !matchString("lockquote") {
 						return
 					}
-					break
 				case 'a':
 					position++
 					if !matchString("ddress") {
 						return
 					}
-					break
 				default:
 					return
 				}
@@ -7779,13 +7599,11 @@ func (p *yyParser) Init() {
 					if !matchString("TYLE") {
 						goto ko
 					}
-					break
 				case 's':
 					position++
 					if !matchString("tyle") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -7830,13 +7648,11 @@ func (p *yyParser) Init() {
 					if !matchString("TYLE") {
 						goto ko
 					}
-					break
 				case 's':
 					position++
 					if !matchString("tyle") {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -8465,7 +8281,6 @@ func (p *yyParser) Init() {
 					goto loop
 				out:
 					end = position
-					break
 				case '\t', ' ':
 					begin = position
 					if !p.rules[ruleSpacechar]() {
@@ -8488,7 +8303,6 @@ func (p *yyParser) Init() {
 						position = position1
 					}
 					end = position
-					break
 				default:
 					goto ko
 				}
@@ -8519,7 +8333,6 @@ func (p *yyParser) Init() {
 					goto loop
 				out:
 					end = position
-					break
 				case '\t', ' ':
 					begin = position
 					if !p.rules[ruleSpacechar]() {
@@ -8542,7 +8355,6 @@ func (p *yyParser) Init() {
 						position = position1
 					}
 					end = position
-					break
 				default:
 					goto ko
 				}
@@ -8564,12 +8376,10 @@ func (p *yyParser) Init() {
 					if !p.rules[ruleEmphUl]() {
 						return
 					}
-					break
 				case '*':
 					if !p.rules[ruleEmphStar]() {
 						return
 					}
-					break
 				default:
 					return
 				}
@@ -8588,12 +8398,10 @@ func (p *yyParser) Init() {
 					if !p.rules[ruleNewline]() {
 						return
 					}
-					break
 				case '\t', ' ':
 					if !p.rules[ruleSpacechar]() {
 						return
 					}
-					break
 				default:
 					return
 				}
@@ -8760,12 +8568,10 @@ func (p *yyParser) Init() {
 					if !p.rules[ruleStrongUl]() {
 						return
 					}
-					break
 				case '*':
 					if !p.rules[ruleStrongStar]() {
 						return
 					}
-					break
 				default:
 					return
 				}
@@ -9310,12 +9116,10 @@ func (p *yyParser) Init() {
 						switch p.Buffer[position] {
 						case ')':
 							position++ // matchChar
-							break
 						case '\n', '\r':
 							if !p.rules[ruleNewline]() {
 								goto ok
 							}
-							break
 						default:
 							goto ok
 						}
@@ -9366,12 +9170,10 @@ func (p *yyParser) Init() {
 						switch p.Buffer[position] {
 						case ')':
 							position++ // matchChar
-							break
 						case '\n', '\r':
 							if !p.rules[ruleNewline]() {
 								goto ok
 							}
-							break
 						default:
 							goto ok
 						}
@@ -9723,12 +9525,10 @@ func (p *yyParser) Init() {
 							if !p.rules[ruleNewline]() {
 								goto ok
 							}
-							break
 						case '\n', '\r':
 							if !p.rules[ruleNewline]() {
 								goto ok
 							}
-							break
 						default:
 							goto ok
 						}
@@ -9782,12 +9582,10 @@ func (p *yyParser) Init() {
 							if !p.rules[ruleNewline]() {
 								goto ok
 							}
-							break
 						case '\n', '\r':
 							if !p.rules[ruleNewline]() {
 								goto ok
 							}
-							break
 						default:
 							goto ok
 						}
@@ -9841,12 +9639,10 @@ func (p *yyParser) Init() {
 							if !p.rules[ruleNewline]() {
 								goto ok
 							}
-							break
 						case '\n', '\r':
 							if !p.rules[ruleNewline]() {
 								goto ok
 							}
-							break
 						default:
 							goto ok
 						}
@@ -10070,7 +9866,6 @@ func (p *yyParser) Init() {
 								if !p.rules[ruleSpacechar]() {
 									goto nextAlt
 								}
-								break
 							default:
 								goto nextAlt
 							}
@@ -10151,7 +9946,6 @@ func (p *yyParser) Init() {
 									if !p.rules[ruleSpacechar]() {
 										goto out
 									}
-									break
 								default:
 									goto out
 								}
@@ -10250,7 +10044,6 @@ func (p *yyParser) Init() {
 								if !p.rules[ruleSpacechar]() {
 									goto nextAlt27
 								}
-								break
 							default:
 								goto nextAlt27
 							}
@@ -10331,7 +10124,6 @@ func (p *yyParser) Init() {
 									if !p.rules[ruleSpacechar]() {
 										goto out29
 									}
-									break
 								default:
 									goto out29
 								}
@@ -10430,7 +10222,6 @@ func (p *yyParser) Init() {
 								if !p.rules[ruleSpacechar]() {
 									goto nextAlt52
 								}
-								break
 							default:
 								goto nextAlt52
 							}
@@ -10511,7 +10302,6 @@ func (p *yyParser) Init() {
 									if !p.rules[ruleSpacechar]() {
 										goto out54
 									}
-									break
 								default:
 									goto out54
 								}
@@ -10610,7 +10400,6 @@ func (p *yyParser) Init() {
 								if !p.rules[ruleSpacechar]() {
 									goto nextAlt77
 								}
-								break
 							default:
 								goto nextAlt77
 							}
@@ -10691,7 +10480,6 @@ func (p *yyParser) Init() {
 									if !p.rules[ruleSpacechar]() {
 										goto out79
 									}
-									break
 								default:
 									goto out79
 								}
@@ -10790,7 +10578,6 @@ func (p *yyParser) Init() {
 								if !p.rules[ruleSpacechar]() {
 									goto ko
 								}
-								break
 							default:
 								goto ko
 							}
@@ -10871,7 +10658,6 @@ func (p *yyParser) Init() {
 									if !p.rules[ruleSpacechar]() {
 										goto out103
 									}
-									break
 								default:
 									goto out103
 								}
@@ -10971,7 +10757,6 @@ func (p *yyParser) Init() {
 					if !matchChar('\'') {
 						goto ko
 					}
-					break
 				case '"':
 					position++ // matchChar
 				loop4:
@@ -10989,7 +10774,6 @@ func (p *yyParser) Init() {
 					if !matchChar('"') {
 						goto ko
 					}
-					break
 				default:
 					goto ko
 				}
@@ -11010,7 +10794,6 @@ func (p *yyParser) Init() {
 				switch p.Buffer[position] {
 				case '-':
 					position++ // matchChar
-					break
 				default:
 					if !matchClass(5) {
 						goto ko
@@ -11025,7 +10808,6 @@ func (p *yyParser) Init() {
 				switch p.Buffer[position] {
 				case '-':
 					position++ // matchChar
-					break
 				default:
 					if !matchClass(5) {
 						goto out
@@ -11168,10 +10950,8 @@ func (p *yyParser) Init() {
 				switch p.Buffer[position] {
 				case '\t':
 					position++ // matchChar
-					break
 				case ' ':
 					position++ // matchChar
-					break
 				default:
 					return
 				}
@@ -11212,10 +10992,8 @@ func (p *yyParser) Init() {
 				case '\r':
 					position++ // matchChar
 					matchChar('\n')
-					break
 				case '\n':
 					position++ // matchChar
-					break
 				default:
 					goto ko
 				}
@@ -11281,43 +11059,30 @@ func (p *yyParser) Init() {
 				switch p.Buffer[position] {
 				case '\\':
 					position++ // matchChar
-					break
 				case '#':
 					position++ // matchChar
-					break
 				case '!':
 					position++ // matchChar
-					break
 				case '<':
 					position++ // matchChar
-					break
 				case ')':
 					position++ // matchChar
-					break
 				case '(':
 					position++ // matchChar
-					break
 				case ']':
 					position++ // matchChar
-					break
 				case '[':
 					position++ // matchChar
-					break
 				case '&':
 					position++ // matchChar
-					break
 				case '`':
 					position++ // matchChar
-					break
 				case '_':
 					position++ // matchChar
-					break
 				case '*':
 					position++ // matchChar
-					break
 				case '~':
 					position++ // matchChar
-					break
 				default:
 					if !p.rules[ruleExtendedSpecialChar]() {
 						return
@@ -11340,12 +11105,10 @@ func (p *yyParser) Init() {
 					if !p.rules[ruleNewline]() {
 						goto ok
 					}
-					break
 				case '\t', ' ':
 					if !p.rules[ruleSpacechar]() {
 						goto ok
 					}
-					break
 				default:
 					if !p.rules[ruleSpecialChar]() {
 						goto ok
@@ -11372,388 +11135,260 @@ func (p *yyParser) Init() {
 				switch p.Buffer[position] {
 				case '\377':
 					position++ // matchChar
-					break
 				case '\376':
 					position++ // matchChar
-					break
 				case '\375':
 					position++ // matchChar
-					break
 				case '\374':
 					position++ // matchChar
-					break
 				case '\373':
 					position++ // matchChar
-					break
 				case '\372':
 					position++ // matchChar
-					break
 				case '\371':
 					position++ // matchChar
-					break
 				case '\370':
 					position++ // matchChar
-					break
 				case '\367':
 					position++ // matchChar
-					break
 				case '\366':
 					position++ // matchChar
-					break
 				case '\365':
 					position++ // matchChar
-					break
 				case '\364':
 					position++ // matchChar
-					break
 				case '\363':
 					position++ // matchChar
-					break
 				case '\362':
 					position++ // matchChar
-					break
 				case '\361':
 					position++ // matchChar
-					break
 				case '\360':
 					position++ // matchChar
-					break
 				case '\357':
 					position++ // matchChar
-					break
 				case '\356':
 					position++ // matchChar
-					break
 				case '\355':
 					position++ // matchChar
-					break
 				case '\354':
 					position++ // matchChar
-					break
 				case '\353':
 					position++ // matchChar
-					break
 				case '\352':
 					position++ // matchChar
-					break
 				case '\351':
 					position++ // matchChar
-					break
 				case '\350':
 					position++ // matchChar
-					break
 				case '\347':
 					position++ // matchChar
-					break
 				case '\346':
 					position++ // matchChar
-					break
 				case '\345':
 					position++ // matchChar
-					break
 				case '\344':
 					position++ // matchChar
-					break
 				case '\343':
 					position++ // matchChar
-					break
 				case '\342':
 					position++ // matchChar
-					break
 				case '\341':
 					position++ // matchChar
-					break
 				case '\340':
 					position++ // matchChar
-					break
 				case '\337':
 					position++ // matchChar
-					break
 				case '\336':
 					position++ // matchChar
-					break
 				case '\335':
 					position++ // matchChar
-					break
 				case '\334':
 					position++ // matchChar
-					break
 				case '\333':
 					position++ // matchChar
-					break
 				case '\332':
 					position++ // matchChar
-					break
 				case '\331':
 					position++ // matchChar
-					break
 				case '\330':
 					position++ // matchChar
-					break
 				case '\327':
 					position++ // matchChar
-					break
 				case '\326':
 					position++ // matchChar
-					break
 				case '\325':
 					position++ // matchChar
-					break
 				case '\324':
 					position++ // matchChar
-					break
 				case '\323':
 					position++ // matchChar
-					break
 				case '\322':
 					position++ // matchChar
-					break
 				case '\321':
 					position++ // matchChar
-					break
 				case '\320':
 					position++ // matchChar
-					break
 				case '\317':
 					position++ // matchChar
-					break
 				case '\316':
 					position++ // matchChar
-					break
 				case '\315':
 					position++ // matchChar
-					break
 				case '\314':
 					position++ // matchChar
-					break
 				case '\313':
 					position++ // matchChar
-					break
 				case '\312':
 					position++ // matchChar
-					break
 				case '\311':
 					position++ // matchChar
-					break
 				case '\310':
 					position++ // matchChar
-					break
 				case '\307':
 					position++ // matchChar
-					break
 				case '\306':
 					position++ // matchChar
-					break
 				case '\305':
 					position++ // matchChar
-					break
 				case '\304':
 					position++ // matchChar
-					break
 				case '\303':
 					position++ // matchChar
-					break
 				case '\302':
 					position++ // matchChar
-					break
 				case '\301':
 					position++ // matchChar
-					break
 				case '\300':
 					position++ // matchChar
-					break
 				case '\277':
 					position++ // matchChar
-					break
 				case '\276':
 					position++ // matchChar
-					break
 				case '\275':
 					position++ // matchChar
-					break
 				case '\274':
 					position++ // matchChar
-					break
 				case '\273':
 					position++ // matchChar
-					break
 				case '\272':
 					position++ // matchChar
-					break
 				case '\271':
 					position++ // matchChar
-					break
 				case '\270':
 					position++ // matchChar
-					break
 				case '\267':
 					position++ // matchChar
-					break
 				case '\266':
 					position++ // matchChar
-					break
 				case '\265':
 					position++ // matchChar
-					break
 				case '\264':
 					position++ // matchChar
-					break
 				case '\263':
 					position++ // matchChar
-					break
 				case '\262':
 					position++ // matchChar
-					break
 				case '\261':
 					position++ // matchChar
-					break
 				case '\260':
 					position++ // matchChar
-					break
 				case '\257':
 					position++ // matchChar
-					break
 				case '\256':
 					position++ // matchChar
-					break
 				case '\255':
 					position++ // matchChar
-					break
 				case '\254':
 					position++ // matchChar
-					break
 				case '\253':
 					position++ // matchChar
-					break
 				case '\252':
 					position++ // matchChar
-					break
 				case '\251':
 					position++ // matchChar
-					break
 				case '\250':
 					position++ // matchChar
-					break
 				case '\247':
 					position++ // matchChar
-					break
 				case '\246':
 					position++ // matchChar
-					break
 				case '\245':
 					position++ // matchChar
-					break
 				case '\244':
 					position++ // matchChar
-					break
 				case '\243':
 					position++ // matchChar
-					break
 				case '\242':
 					position++ // matchChar
-					break
 				case '\241':
 					position++ // matchChar
-					break
 				case '\240':
 					position++ // matchChar
-					break
 				case '\237':
 					position++ // matchChar
-					break
 				case '\236':
 					position++ // matchChar
-					break
 				case '\235':
 					position++ // matchChar
-					break
 				case '\234':
 					position++ // matchChar
-					break
 				case '\233':
 					position++ // matchChar
-					break
 				case '\232':
 					position++ // matchChar
-					break
 				case '\231':
 					position++ // matchChar
-					break
 				case '\230':
 					position++ // matchChar
-					break
 				case '\227':
 					position++ // matchChar
-					break
 				case '\226':
 					position++ // matchChar
-					break
 				case '\225':
 					position++ // matchChar
-					break
 				case '\224':
 					position++ // matchChar
-					break
 				case '\223':
 					position++ // matchChar
-					break
 				case '\222':
 					position++ // matchChar
-					break
 				case '\221':
 					position++ // matchChar
-					break
 				case '\220':
 					position++ // matchChar
-					break
 				case '\217':
 					position++ // matchChar
-					break
 				case '\216':
 					position++ // matchChar
-					break
 				case '\215':
 					position++ // matchChar
-					break
 				case '\214':
 					position++ // matchChar
-					break
 				case '\213':
 					position++ // matchChar
-					break
 				case '\212':
 					position++ // matchChar
-					break
 				case '\211':
 					position++ // matchChar
-					break
 				case '\210':
 					position++ // matchChar
-					break
 				case '\207':
 					position++ // matchChar
-					break
 				case '\206':
 					position++ // matchChar
-					break
 				case '\205':
 					position++ // matchChar
-					break
 				case '\204':
 					position++ // matchChar
-					break
 				case '\203':
 					position++ // matchChar
-					break
 				case '\202':
 					position++ // matchChar
-					break
 				case '\201':
 					position++ // matchChar
-					break
 				case '\200':
 					position++ // matchChar
-					break
 				default:
 					if !matchClass(4) {
 						return
@@ -11900,10 +11535,8 @@ func (p *yyParser) Init() {
 					if !matchString("   ") {
 						return
 					}
-					break
 				case '\t':
 					position++ // matchChar
-					break
 				default:
 					return
 				}
@@ -12117,7 +11750,6 @@ func (p *yyParser) Init() {
 					if !matchChar('^') {
 						goto ko
 					}
-					break
 				default:
 					if !(p.extension.Smart) {
 						goto ko
@@ -12129,16 +11761,12 @@ func (p *yyParser) Init() {
 						switch p.Buffer[position] {
 						case '"':
 							position++ // matchChar
-							break
 						case '\'':
 							position++ // matchChar
-							break
 						case '-':
 							position++ // matchChar
-							break
 						case '.':
 							position++ // matchChar
-							break
 						default:
 							goto ko
 						}
@@ -12170,22 +11798,18 @@ func (p *yyParser) Init() {
 					if !p.rules[ruleApostrophe]() {
 						return
 					}
-					break
 				case '"':
 					if !p.rules[ruleDoubleQuoted]() {
 						return
 					}
-					break
 				case '-':
 					if !p.rules[ruleDash]() {
 						return
 					}
-					break
 				case '.':
 					if !p.rules[ruleEllipsis]() {
 						return
 					}
-					break
 				default:
 					return
 				}
@@ -12290,12 +11914,10 @@ func (p *yyParser) Init() {
 					if !p.rules[ruleNewline]() {
 						goto ok
 					}
-					break
 				case '\t', ' ':
 					if !p.rules[ruleSpacechar]() {
 						goto ok
 					}
-					break
 				default:
 					goto ok
 				}
@@ -12924,10 +12546,8 @@ func (p *yyParser) Init() {
 				switch p.Buffer[position] {
 				case '~':
 					position++ // matchChar
-					break
 				case ':':
 					position++ // matchChar
-					break
 				default:
 					goto ko
 				}
