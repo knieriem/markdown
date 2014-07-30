@@ -31,7 +31,7 @@ const (
 	// rebuild it using
 	//	make nuke
 	//	make parser
-	needParserIfaceVersion = parserIfaceVersion_17
+	needParserIfaceVersion = parserIfaceVersion_18
 )
 
 // Markdown Extensions.
@@ -81,7 +81,7 @@ func (p *Parser) Markdown(src io.Reader, f Formatter) {
 	if p.yy.extension.Notes {
 		p.parseRule(ruleNotes, s)
 	}
-	savedPos := p.yy.state.heap.Pos()
+	p.yy.state.heap.Reset()
 
 	for {
 		tree := p.parseRule(ruleDocblock, s)
@@ -91,7 +91,8 @@ func (p *Parser) Markdown(src io.Reader, f Formatter) {
 		s = p.yy.ResetBuffer("")
 		tree = p.processRawBlocks(tree)
 		f.FormatBlock(tree)
-		p.yy.state.heap.setPos(savedPos)
+
+		p.yy.state.heap.Reset()
 	}
 	f.Finish()
 }

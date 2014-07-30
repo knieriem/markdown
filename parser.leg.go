@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	parserIfaceVersion_17 = iota
+	parserIfaceVersion_18 = iota
 )
 
 // Semantic value of a parsing action.
@@ -1043,6 +1043,8 @@ func (p *yyParser) Init() {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
 			p.references = reverse(a)
+			p.state.heap.hasGlobals = true
+
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
@@ -1121,6 +1123,7 @@ func (p *yyParser) Init() {
 		func(yytext string, _ int) {
 			ref := yyval[yyp-1]
 
+			p.state.heap.hasGlobals = true
 			if match, ok := p.find_note(ref.contents.str); ok {
 				yy = p.mkElem(NOTE)
 				yy.children = match.children
@@ -1171,6 +1174,7 @@ func (p *yyParser) Init() {
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			yy = p.mkList(NOTE, a)
+			p.state.heap.hasGlobals = true
 			yy.contents.str = ""
 			yyval[yyp-1] = a
 		},
@@ -1206,6 +1210,7 @@ func (p *yyParser) Init() {
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			yy = p.mkStringFromList(a, true)
+			p.state.heap.hasGlobals = true
 			yy.key = RAW
 
 			yyval[yyp-1] = a
@@ -9668,7 +9673,9 @@ func (p *yyParser) Init() {
 			position = position0
 			return
 		},
-		/* 189 References <- (StartList ((Reference { a = cons(b, a) }) / SkipBlock)* { p.references = reverse(a) } commit) */
+		/* 189 References <- (StartList ((Reference { a = cons(b, a) }) / SkipBlock)* { p.references = reverse(a)
+		   p.state.heap.hasGlobals = true
+		 } commit) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 2)
@@ -12058,6 +12065,7 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 237 NoteReference <- (&{p.extension.Notes} RawNoteReference {
+		    p.state.heap.hasGlobals = true
 		    if match, ok := p.find_note(ref.contents.str); ok {
 		        yy = p.mkElem(NOTE)
 		        yy.children = match.children
@@ -12188,6 +12196,7 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 240 InlineNote <- (&{p.extension.Notes} '^[' StartList (!']' Inline { a = cons(yy, a) })+ ']' { yy = p.mkList(NOTE, a)
+		   p.state.heap.hasGlobals = true
 		   yy.contents.str = "" }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
@@ -12276,8 +12285,9 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 242 RawNoteBlock <- (StartList (!BlankLine OptionallyIndentedLine { a = cons(yy, a) })+ (< BlankLine* > { a = cons(p.mkString(yytext), a) }) {   yy = p.mkStringFromList(a, true)
-		    yy.key = RAW
-		}) */
+		       p.state.heap.hasGlobals = true
+		   yy.key = RAW
+		 }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)

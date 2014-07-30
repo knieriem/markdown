@@ -7,17 +7,19 @@ requested, a row is exhausted, and the next one will
 be allocated. Previously allocated rows are tracked in
 elemHeap.rows.
 
-Pos() and setPos() methods allow to query and reset the
-current position (row, and position within the row), which
-allows reusing elements. It must be made sure, that previous
-users of such storage don't access it anymore once setPos has
-been called.
+The Reset() method allows to reset the current position (row, and
+position within the row), which allows reusing elements. Whether
+elements can be reused, depends on the value of the hasGlobals
+field.
 */
 
 type elemHeap struct {
 	rows [][]element
 	heapPos
 	rowSize int
+
+	base       heapPos
+	hasGlobals bool
 }
 
 type heapPos struct {
@@ -38,12 +40,18 @@ func (h *elemHeap) init(size int) {
 	h.rowSize = size
 	h.rows = [][]element{make([]element, size)}
 	h.row = h.rows[h.iRow]
+	h.base = h.heapPos
 }
 
-func (h *elemHeap) Pos() heapPos {
-	return h.heapPos
-}
-
-func (h *elemHeap) setPos(i heapPos) {
-	h.heapPos = i
+func (h *elemHeap) Reset() {
+	if !h.hasGlobals {
+		h.heapPos = h.base
+	} else {
+		/* Don't restore saved position in case elements added
+		 * after the previous Reset call are needed in
+		 * global context, like notes.
+		 */
+		h.hasGlobals = false
+		h.base = h.heapPos
+	}
 }

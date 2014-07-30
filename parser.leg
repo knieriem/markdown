@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	parserIfaceVersion_17 = iota
+	parserIfaceVersion_18 = iota
 )
 
 // Semantic value of a parsing action.
@@ -676,7 +676,9 @@ RefTitleParens = Spnl '(' < ( !(')' Sp Newline | Newline) . )* > ')'
 
 References = a:StartList
              ( b:Reference { a = cons(b, a) } | SkipBlock )*
-             { p.references = reverse(a) }
+             { p.references = reverse(a)
+               p.state.heap.hasGlobals = true
+             }
              commit
 
 Ticks1 = "`" !'`'
@@ -787,6 +789,7 @@ DoubleQuoted =  DoubleQuoteStart
 NoteReference = &{ p.extension.Notes }
                 ref:RawNoteReference
                 {
+                    p.state.heap.hasGlobals = true
                     if match, ok := p.find_note(ref.contents.str); ok {
                         $$ = p.mkElem(NOTE)
                         $$.children = match.children
@@ -814,7 +817,8 @@ InlineNote =    &{ p.extension.Notes }
                 ( !']' Inline { a = cons($$, a) } )+
                 ']'
                 { $$ = p.mkList(NOTE, a)
-                  $$.contents.str = "" }
+                 p.state.heap.hasGlobals = true
+                 $$.contents.str = "" }
 
 Notes =         a:StartList
                 ( b:Note { a = cons(b, a) } | SkipBlock )*
@@ -825,7 +829,8 @@ RawNoteBlock =  a:StartList
                     ( !BlankLine OptionallyIndentedLine { a = cons($$, a) } )+
                 ( < BlankLine* > { a = cons(p.mkString(yytext), a) } )
                 {   $$ = p.mkStringFromList(a, true)
-                    $$.key = RAW
+                      p.state.heap.hasGlobals = true
+                  $$.key = RAW
                 }
 
 
