@@ -12,7 +12,7 @@ import (
 // for each pair of .text/.html files in the given subdirectory
 // of `./tests' compare the expected html output with
 // the output of Parser.Markdown.
-func runDirTests(dir string, t *testing.T) {
+func runDirTests(dir string, opt *Extensions, t *testing.T) {
 
 	dirPath := filepath.Join("tests", dir)
 	f, err := os.Open(dirPath)
@@ -29,7 +29,7 @@ func runDirTests(dir string, t *testing.T) {
 	var buf bytes.Buffer
 	fHTML := ToHTML(&buf)
 	fGroff := ToGroffMM(&buf)
-	p := NewParser(nil)
+	p := NewParser(opt)
 	for _, name := range names {
 		if filepath.Ext(name) != ".text" {
 			continue
@@ -75,7 +75,11 @@ func compareOutput(w *bytes.Buffer, f Formatter, ext string, textPath string, p 
 }
 
 func TestMarkdown103(t *testing.T) {
-	runDirTests("md1.0.3", t)
+	runDirTests("md1.0.3", nil, t)
+}
+
+func TestMarkdownIssues(t *testing.T) {
+	runDirTests("issues", &Extensions{Notes: true}, t)
 }
 
 // This test will make the test run fail with a
