@@ -198,7 +198,7 @@ func (w *troffOut) elem(elt *element, isFirst bool) *troffOut {
 			w.s(".FS\n")
 			w.skipPadding()
 			w.children(elt)
-			w.req("FE")
+			w.req("FE\n")
 		}
 	case REFERENCE:
 		/* Nonprinting */

@@ -269,15 +269,23 @@ func (w *htmlOut) elem(elt *element) *htmlOut {
 }
 
 func (w *htmlOut) printEndnotes() {
+	extraNewline := func() {
+		// add an extra newline to maintain
+		// compatibility with the C version.
+		w.padded--
+	}
+
 	counter := 0
 
 	w.s("<hr/>\n<ol id=\"notes\">")
 	for _, elt := range w.endNotes {
 		counter++
+		extraNewline()
 		w.br().s(fmt.Sprintf("<li id=\"fn%d\">\n", counter)).skipPadding()
 		w.children(elt)
 		w.s(fmt.Sprintf(" <a href=\"#fnref%d\" title=\"Jump back to reference\">[back]</a>", counter))
 		w.br().s("</li>")
 	}
+	extraNewline()
 	w.br().s("</ol>")
 }
