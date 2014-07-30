@@ -474,20 +474,20 @@ func (p *yyParser) Init() {
 		},
 		/* 6 AtxHeading */
 		func(yytext string, _ int) {
-			s := yyval[yyp-1]
-			a := yyval[yyp-2]
+			a := yyval[yyp-1]
+			s := yyval[yyp-2]
 			a = cons(yy, a)
-			yyval[yyp-1] = s
-			yyval[yyp-2] = a
+			yyval[yyp-1] = a
+			yyval[yyp-2] = s
 		},
 		/* 7 AtxHeading */
 		func(yytext string, _ int) {
-			s := yyval[yyp-1]
-			a := yyval[yyp-2]
+			a := yyval[yyp-1]
+			s := yyval[yyp-2]
 			yy = p.mkList(s.key, a)
 			s = nil
-			yyval[yyp-1] = s
-			yyval[yyp-2] = a
+			yyval[yyp-1] = a
+			yyval[yyp-2] = s
 		},
 		/* 8 SetextHeading1 */
 		func(yytext string, _ int) {
@@ -1137,29 +1137,29 @@ func (p *yyParser) Init() {
 		},
 		/* 101 Note */
 		func(yytext string, _ int) {
-			ref := yyval[yyp-1]
-			a := yyval[yyp-2]
+			a := yyval[yyp-1]
+			ref := yyval[yyp-2]
 			a = cons(yy, a)
-			yyval[yyp-1] = ref
-			yyval[yyp-2] = a
+			yyval[yyp-1] = a
+			yyval[yyp-2] = ref
 		},
 		/* 102 Note */
 		func(yytext string, _ int) {
-			ref := yyval[yyp-1]
-			a := yyval[yyp-2]
+			a := yyval[yyp-1]
+			ref := yyval[yyp-2]
 			a = cons(yy, a)
-			yyval[yyp-1] = ref
-			yyval[yyp-2] = a
+			yyval[yyp-1] = a
+			yyval[yyp-2] = ref
 		},
 		/* 103 Note */
 		func(yytext string, _ int) {
-			ref := yyval[yyp-1]
-			a := yyval[yyp-2]
+			a := yyval[yyp-1]
+			ref := yyval[yyp-2]
 			yy = p.mkList(NOTE, a)
 			yy.contents.str = ref.contents.str
 
-			yyval[yyp-1] = ref
-			yyval[yyp-2] = a
+			yyval[yyp-1] = a
+			yyval[yyp-2] = ref
 		},
 		/* 104 InlineNote */
 		func(yytext string, _ int) {
@@ -1665,14 +1665,14 @@ func (p *yyParser) Init() {
 			if !p.rules[ruleAtxStart]() {
 				goto ko
 			}
-			doarg(yySet, -1)
+			doarg(yySet, -2)
 			if !p.rules[ruleSp]() {
 				goto ko
 			}
 			if !p.rules[ruleStartList]() {
 				goto ko
 			}
-			doarg(yySet, -2)
+			doarg(yySet, -1)
 			if !p.rules[ruleAtxInline]() {
 				goto ko
 			}
@@ -12146,7 +12146,7 @@ func (p *yyParser) Init() {
 			if !p.rules[ruleRawNoteReference]() {
 				goto ko
 			}
-			doarg(yySet, -1)
+			doarg(yySet, -2)
 			if !matchChar(':') {
 				goto ko
 			}
@@ -12156,7 +12156,7 @@ func (p *yyParser) Init() {
 			if !p.rules[ruleStartList]() {
 				goto ko
 			}
-			doarg(yySet, -2)
+			doarg(yySet, -1)
 			if !p.rules[ruleRawNoteBlock]() {
 				goto ko
 			}
