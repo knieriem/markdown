@@ -14,7 +14,7 @@ s,find_reference,p.findReference,g
 
 s,->key,.key,g
 s,->children,.children,g
-s,->contents.str,.contents.str,g
+s,->Contents.Str,.Contents.Str,g
 
 /{ *if (extens/ {
 	s,if (,if ,
@@ -30,7 +30,7 @@ s,->contents.str,.contents.str,g
 	s,extension.EXT_NOTES.,extension.Notes,g
 }
 
-s,{ *element \*[a-z]*\; *$,{,
+s,{ *Element \*[a-z]*\; *$,{,
 
 /raw\.key =/ s,;$,,
 /result =/ s,;$,,

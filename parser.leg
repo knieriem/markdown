@@ -32,24 +32,24 @@ const (
 )
 
 // Semantic value of a parsing action.
-type element struct {
-	key int
-	contents
-	children *element
-	next     *element
+type Element struct {
+	Key int
+	Contents
+	Children *Element
+	Next     *Element
 }
 
-// Information (label, URL and title) for a link.
-type link struct {
-	label *element
-	url   string
-	title string
+// Information (label, URL and title) for a Link.
+type Link struct {
+	Label *Element
+	URL   string
+	Title string
 }
 
-// Union for contents of an Element (string, list, or link).
-type contents struct {
-	str string
-	*link
+// Union for Contents of an Element (string, list, or Link).
+type Contents struct {
+	Str string
+	*Link
 }
 
 // Types of semantic values returned by parsers.
@@ -98,9 +98,9 @@ const (
 type state struct {
 	extension  Extensions
 	heap       elemHeap
-	tree       *element /* Results of parse. */
-	references *element /* List of link references found. */
-	notes      *element /* List of footnotes found. */
+	tree       *Element /* Results of parse. */
+	references *Element /* List of Link references found. */
+	notes      *Element /* List of footnotes found. */
 }
 
 %}
@@ -109,7 +109,7 @@ type state struct {
 
 %noexport
 
-%YYSTYPE *element
+%YYSTYPE *Element
 
 Doc =       a:StartList ( Block { a = cons($$, a) } )*
             { p.tree = reverse(a) }
@@ -133,10 +133,10 @@ Block =     BlankLine*
             | Plain )
 
 Para =      NonindentSpace a:Inlines BlankLine+
-            { $$ = a; $$.key = PARA }
+            { $$ = a; $$.Key = PARA }
 
 Plain =     a:Inlines
-            { $$ = a; $$.key = PLAIN }
+            { $$ = a; $$.Key = PLAIN }
 
 AtxInline = !Newline !(Sp '#'* Sp Newline) Inline
 
@@ -144,7 +144,7 @@ AtxStart =  &'#' < ( "######" | "#####" | "####" | "###" | "##" | "#" ) >
             { $$ = p.mkElem(H1 + (len(yytext) - 1)) }
 
 AtxHeading = s:AtxStart Sp a:StartList ( AtxInline { a = cons($$, a) } )+ (Sp '#'* Sp)?  Newline
-            { $$ = p.mkList(s.key, a)
+            { $$ = p.mkList(s.Key, a)
               s = nil }
 
 SetextHeading = SetextHeading1 | SetextHeading2
@@ -165,7 +165,7 @@ Heading = SetextHeading | AtxHeading
 
 BlockQuote = a:BlockQuoteRaw
              {  $$ = p.mkElem(BLOCKQUOTE)
-                $$.children = a
+                $$.Children = a
              }
 
 BlockQuoteRaw =  a:StartList
@@ -174,7 +174,7 @@ BlockQuoteRaw =  a:StartList
                   ( BlankLine { a = cons(p.mkString("\n"), a) } )*
                  )+
                  {   $$ = p.mkStringFromList(a, true)
-                     $$.key = RAW
+                     $$.Key = RAW
                  }
 
 NonblankIndentedLine = !BlankLine IndentedLine
@@ -186,7 +186,7 @@ VerbatimChunk = a:StartList
 
 Verbatim =     a:StartList ( VerbatimChunk { a = cons($$, a) } )+
                { $$ = p.mkStringFromList(a, false)
-                 $$.key = VERBATIM }
+                 $$.Key = VERBATIM }
 
 HorizontalRule = NonindentSpace
                  ( '*' Sp '*' Sp '*' (Sp '*')*
@@ -198,7 +198,7 @@ HorizontalRule = NonindentSpace
 Bullet = !HorizontalRule NonindentSpace ('+' | '*' | '-') Spacechar+
 
 BulletList = &Bullet (ListTight | ListLoose)
-             { $$.key = BULLETLIST }
+             { $$.Key = BULLETLIST }
 
 ListTight = a:StartList
             ( ListItemTight { a = cons($$, a) } )+
@@ -208,8 +208,8 @@ ListTight = a:StartList
 ListLoose = a:StartList
             ( b:ListItem BlankLine*
               {
-                  li := b.children
-                  li.contents.str += "\n\n"
+                  li := b.Children
+                  li.Contents.Str += "\n\n"
                   a = cons(b, a)
               } )+
             { $$ = p.mkList(LIST, a) }
@@ -220,9 +220,9 @@ ListItem =  ( Bullet | Enumerator | DefMarker )
             ( ListContinuationBlock { a = cons($$, a) } )*
             {
                raw := p.mkStringFromList(a, false)
-               raw.key = RAW
+               raw.Key = RAW
                $$ = p.mkElem(LISTITEM)
-               $$.children = raw
+               $$.Children = raw
             }
 
 ListItemTight =
@@ -234,9 +234,9 @@ ListItemTight =
             !ListContinuationBlock
             {
                raw := p.mkStringFromList(a, false)
-               raw.key = RAW
+               raw.Key = RAW
                $$ = p.mkElem(LISTITEM)
-               $$.children = raw
+               $$.Children = raw
             }
 
 ListBlock = a:StartList
@@ -258,7 +258,7 @@ ListContinuationBlock = a:StartList
 Enumerator = NonindentSpace [0-9]+ '.' Spacechar+
 
 OrderedList = &Enumerator (ListTight | ListLoose)
-              { $$.key = ORDEREDLIST }
+              { $$.Key = ORDEREDLIST }
 
 ListBlockLine = !BlankLine
                 !( (Indent? (Bullet | Enumerator)) | DefMarker )
@@ -445,7 +445,7 @@ HtmlBlock = &'<' < ( HtmlBlockInTags | HtmlComment | HtmlBlockSelfClosing ) >
                     $$ = p.mkList(LIST, nil)
                 } else {
                     $$ = p.mkString(yytext)
-                    $$.key = HTMLBLOCK
+                    $$.Key = HTMLBLOCK
                 }
             }
 
@@ -467,7 +467,7 @@ StyleBlock =    < InStyleTags >
                         $$ = p.mkList(LIST, nil)
                     } else {
                         $$ = p.mkString(yytext)
-                        $$.key = HTMLBLOCK
+                        $$.Key = HTMLBLOCK
                     }
                 }
 
@@ -495,11 +495,11 @@ Inline  = Str
 
 Space = Spacechar+
         { $$ = p.mkString(" ")
-          $$.key = SPACE }
+          $$.Key = SPACE }
 
 Str = a:StartList < NormalChar+ > { a = cons(p.mkString(yytext), a) }
       ( StrChunk { a = cons($$, a) } )*
-      { if a.next == nil { $$ = a; } else { $$ = p.mkList(LIST, a) } }
+      { if a.Next == nil { $$ = a; } else { $$ = p.mkList(LIST, a) } }
 
 StrChunk = < (NormalChar | '_'+ &Alphanumeric)+ > { $$ = p.mkString(yytext) } |
            AposChunk
@@ -511,14 +511,14 @@ EscapedChar =   '\\' !Newline < [-\\`|*_{}[\]()#+.!><] >
                 { $$ = p.mkString(yytext) }
 
 Entity =    ( HexEntity | DecEntity | CharEntity )
-            { $$ = p.mkString(yytext); $$.key = HTML }
+            { $$ = p.mkString(yytext); $$.Key = HTML }
 
 Endline =   LineBreak | TerminalEndline | NormalEndline
 
 NormalEndline =   Sp Newline !BlankLine !'>' !AtxStart
                   !(Line ('='+ | '-'+) Newline)
                   { $$ = p.mkString("\n")
-                    $$.key = SPACE }
+                    $$.Key = SPACE }
 
 TerminalEndline = Sp Newline Eof
                   { $$ = nil }
@@ -580,11 +580,11 @@ Strike = &{ p.extension.Strike }
          { $$ = p.mkList(STRIKE, a) }
 
 Image = '!' ( ExplicitLink | ReferenceLink )
-        {	if $$.key == LINK {
-			$$.key = IMAGE
+        {	if $$.Key == LINK {
+			$$.Key = IMAGE
 		} else {
 			result := $$
-			$$.children = cons(p.mkString("!"), result.children)
+			$$.Children = cons(p.mkString("!"), result.Children)
 		}
 	}
 
@@ -594,13 +594,13 @@ ReferenceLink = ReferenceLinkDouble | ReferenceLinkSingle
 
 ReferenceLinkDouble =  a:Label < Spnl > !"[]" b:Label
                        {
-                           if match, found := p.findReference(b.children); found {
-                               $$ = p.mkLink(a.children, match.url, match.title);
+                           if match, found := p.findReference(b.Children); found {
+                               $$ = p.mkLink(a.Children, match.URL, match.Title);
                                a = nil
                                b = nil
                            } else {
                                result := p.mkElem(LIST)
-                               result.children = cons(p.mkString("["), cons(a, cons(p.mkString("]"), cons(p.mkString(yytext),
+                               result.Children = cons(p.mkString("["), cons(a, cons(p.mkString("]"), cons(p.mkString(yytext),
                                                    cons(p.mkString("["), cons(b, p.mkString("]")))))))
                                $$ = result
                            }
@@ -608,18 +608,18 @@ ReferenceLinkDouble =  a:Label < Spnl > !"[]" b:Label
 
 ReferenceLinkSingle =  a:Label < (Spnl "[]")? >
                        {
-                           if match, found := p.findReference(a.children); found {
-                               $$ = p.mkLink(a.children, match.url, match.title)
+                           if match, found := p.findReference(a.Children); found {
+                               $$ = p.mkLink(a.Children, match.URL, match.Title)
                                a = nil
                            } else {
                                result := p.mkElem(LIST)
-                               result.children = cons(p.mkString("["), cons(a, cons(p.mkString("]"), p.mkString(yytext))));
+                               result.Children = cons(p.mkString("["), cons(a, cons(p.mkString("]"), p.mkString(yytext))));
                                $$ = result
                            }
                        }
 
 ExplicitLink =  l:Label '(' Sp s:Source Spnl t:Title Sp ')'
-                { $$ = p.mkLink(l.children, s.contents.str, t.contents.str)
+                { $$ = p.mkLink(l.Children, s.Contents.Str, t.Contents.Str)
                   s = nil
                   t = nil
                   l = nil }
@@ -647,11 +647,11 @@ AutoLinkEmail = '<' ( "mailto:" )? < [-A-Za-z0-9+_./!%~$]+ '@' ( !Newline !'>' .
                 }
 
 Reference = NonindentSpace !"[]" l:Label ':' Spnl s:RefSrc t:RefTitle BlankLine+
-            { $$ = p.mkLink(l.children, s.contents.str, t.contents.str)
+            { $$ = p.mkLink(l.Children, s.Contents.Str, t.Contents.Str)
               s = nil
               t = nil
               l = nil
-              $$.key = REFERENCE }
+              $$.Key = REFERENCE }
 
 Label = '[' ( !'^' &{ p.extension.Notes } | &. &{ !p.extension.Notes } )
         a:StartList
@@ -661,7 +661,7 @@ Label = '[' ( !'^' &{ p.extension.Notes } | &. &{ !p.extension.Notes } )
 
 RefSrc = < Nonspacechar+ > 
          { $$ = p.mkString(yytext)
-           $$.key = HTML }
+           $$.Key = HTML }
 
 RefTitle =  ( RefTitleSingle | RefTitleDouble | RefTitleParens | EmptyTitle )
             { $$ = p.mkString(yytext) }
@@ -693,14 +693,14 @@ Code = ( Ticks1 Sp < ( ( !'`' Nonspacechar )+ | !Ticks1 '`'+ | !( Sp Ticks1 ) ( 
        | Ticks4 Sp < ( ( !'`' Nonspacechar )+ | !Ticks4 '`'+ | !( Sp Ticks4 ) ( Spacechar | Newline !BlankLine ) )+ > Sp Ticks4
        | Ticks5 Sp < ( ( !'`' Nonspacechar )+ | !Ticks5 '`'+ | !( Sp Ticks5 ) ( Spacechar | Newline !BlankLine ) )+ > Sp Ticks5
        )
-       { $$ = p.mkString(yytext); $$.key = CODE }
+       { $$ = p.mkString(yytext); $$.Key = CODE }
 
 RawHtml =   < (HtmlComment | HtmlBlockScript | HtmlTag) >
             {   if p.extension.FilterHTML {
                     $$ = p.mkList(LIST, nil)
                 } else {
                     $$ = p.mkString(yytext)
-                    $$.key = HTML
+                    $$.Key = HTML
                 }
             }
 
@@ -790,12 +790,12 @@ NoteReference = &{ p.extension.Notes }
                 ref:RawNoteReference
                 {
                     p.state.heap.hasGlobals = true
-                    if match, ok := p.find_note(ref.contents.str); ok {
+                    if match, ok := p.find_note(ref.Contents.Str); ok {
                         $$ = p.mkElem(NOTE)
-                        $$.children = match.children
-                        $$.contents.str = ""
+                        $$.Children = match.Children
+                        $$.Contents.Str = ""
                     } else {
-                        $$ = p.mkString("[^"+ref.contents.str+"]")
+                        $$ = p.mkString("[^"+ref.Contents.Str+"]")
                     }
                 }
 
@@ -808,7 +808,7 @@ Note =          &{ p.extension.Notes }
                 ( RawNoteBlock { a = cons($$, a) } )
                 ( &Indent RawNoteBlock { a = cons($$, a) } )*
                 {   $$ = p.mkList(NOTE, a)
-                    $$.contents.str = ref.contents.str
+                    $$.Contents.Str = ref.Contents.Str
                 }
 
 InlineNote =    &{ p.extension.Notes }
@@ -818,7 +818,7 @@ InlineNote =    &{ p.extension.Notes }
                 ']'
                 { $$ = p.mkList(NOTE, a)
                  p.state.heap.hasGlobals = true
-                 $$.contents.str = "" }
+                 $$.Contents.Str = "" }
 
 Notes =         a:StartList
                 ( b:Note { a = cons(b, a) } | SkipBlock )*
@@ -830,7 +830,7 @@ RawNoteBlock =  a:StartList
                 ( < BlankLine* > { a = cons(p.mkString(yytext), a) } )
                 {   $$ = p.mkStringFromList(a, true)
                       p.state.heap.hasGlobals = true
-                  $$.key = RAW
+                  $$.Key = RAW
                 }
 
 
@@ -843,8 +843,8 @@ Definition =	&( (NonindentSpace !Defmark Nonspacechar RawLine) BlankLine? Defmar
 			a:StartList
 			( DListTitle { a = cons($$, a) } )+
 			( DefTight | DefLoose ) {
-				for e := $$.children; e != nil; e = e.next {
-					e.key = DEFDATA
+				for e := $$.Children; e != nil; e = e.Next {
+					e.Key = DEFDATA
 				}
 				a = cons($$, a)
 			}
@@ -855,7 +855,7 @@ DListTitle =	NonindentSpace !Defmark &Nonspacechar
 			(!Endline Inline { a = cons($$, a) } )+
 			Sp Newline
 			{	$$ = p.mkList(LIST, a)
-				$$.key = DEFTITLE
+				$$.Key = DEFTITLE
 			}
 
 DefTight	= &Defmark ListTight
@@ -871,18 +871,18 @@ DefMarker	= &{ p.extension.Dlists } Defmark
  * List manipulation functions
  */
 
-/* cons - cons an element onto a list, returning pointer to new head
+/* cons - cons an Element onto a list, returning pointer to new head
  */
-func cons(new, list *element) *element {
-	new.next = list
+func cons(new, list *Element) *Element {
+	new.Next = list
 	return new
 }
 
 /* reverse - reverse a list, returning pointer to new list
  */
-func reverse(list *element) (new *element) {
+func reverse(list *Element) (new *Element) {
 	for list != nil {
-		next := list.next
+		next := list.Next
 		new = cons(list, new)
 		list = next
 	}
@@ -895,42 +895,42 @@ func reverse(list *element) (new *element) {
  *  in the parsing actions.
  */
 
-/* p.mkElem - generic constructor for element
+/* p.mkElem - generic constructor for Element
  */
-func (p *yyParser) mkElem(key int) *element {
+func (p *yyParser) mkElem(key int) *Element {
 	r := p.state.heap.row
 	if len(r) == 0 {
 		r = p.state.heap.nextRow()
 	}
 	e := &r[0]
-	*e = element{}
+	*e = Element{}
 	p.state.heap.row = r[1:]
-	e.key = key
+	e.Key = key
 	return e
 }
 
-/* p.mkString - constructor for STR element
+/* p.mkString - constructor for STR Element
  */
-func (p *yyParser) mkString(s string) (result *element) {
+func (p *yyParser) mkString(s string) (result *Element) {
 	result = p.mkElem(STR)
-	result.contents.str = s
+	result.Contents.Str = s
 	return
 }
 
-/* p.mkStringFromList - makes STR element by concatenating a
+/* p.mkStringFromList - makes STR Element by concatenating a
  * reversed list of strings, adding optional extra newline
  */
-func (p *yyParser) mkStringFromList(list *element, extra_newline bool) (result *element) {
+func (p *yyParser) mkStringFromList(list *Element, extra_newline bool) (result *Element) {
 	s := ""
-	for list = reverse(list); list != nil; list = list.next {
-		s += list.contents.str
+	for list = reverse(list); list != nil; list = list.Next {
+		s += list.Contents.Str
 	}
 
 	if extra_newline {
 		s += "\n"
 	}
 	result = p.mkElem(STR)
-	result.contents.str = s
+	result.Contents.Str = s
 	return
 }
 
@@ -938,56 +938,56 @@ func (p *yyParser) mkStringFromList(list *element, extra_newline bool) (result *
  * This is designed to be used with cons to build lists in a parser action.
  * The reversing is necessary because cons adds to the head of a list.
  */
-func (p *yyParser) mkList(key int, lst *element) (el *element) {
+func (p *yyParser) mkList(key int, lst *Element) (el *Element) {
 	el = p.mkElem(key)
-	el.children = reverse(lst)
+	el.Children = reverse(lst)
 	return
 }
 
-/* p.mkLink - constructor for LINK element
+/* p.mkLink - constructor for LINK Element
  */
-func (p *yyParser) mkLink(label *element, url, title string) (el *element) {
+func (p *yyParser) mkLink(label *Element, url, title string) (el *Element) {
 	el = p.mkElem(LINK)
-	el.contents.link = &link{label: label, url: url, title: title}
+	el.Contents.Link = &Link{Label: label, URL: url, Title: title}
 	return
 }
 
 /* match_inlines - returns true if inline lists match (case-insensitive...)
  */
-func match_inlines(l1, l2 *element) bool {
+func match_inlines(l1, l2 *Element) bool {
 	for l1 != nil && l2 != nil {
-		if l1.key != l2.key {
+		if l1.Key != l2.Key {
 			return false
 		}
-		switch l1.key {
+		switch l1.Key {
 		case SPACE, LINEBREAK, ELLIPSIS, EMDASH, ENDASH, APOSTROPHE:
 			break
 		case CODE, STR, HTML:
-			if strings.ToUpper(l1.contents.str) != strings.ToUpper(l2.contents.str) {
+			if strings.ToUpper(l1.Contents.Str) != strings.ToUpper(l2.Contents.Str) {
 				return false
 			}
 		case EMPH, STRONG, LIST, SINGLEQUOTED, DOUBLEQUOTED:
-			if !match_inlines(l1.children, l2.children) {
+			if !match_inlines(l1.Children, l2.Children) {
 				return false
 			}
 		case LINK, IMAGE:
 			return false /* No links or images within links */
 		default:
-			log.Fatalf("match_inlines encountered unknown key = %d\n", l1.key)
+			log.Fatalf("match_inlines encountered unknown key = %d\n", l1.Key)
 		}
-		l1 = l1.next
-		l2 = l2.next
+		l1 = l1.Next
+		l2 = l2.Next
 	}
 	return l1 == nil && l2 == nil /* return true if both lists exhausted */
 }
 
-/* find_reference - return true if link found in references matching label.
- * 'link' is modified with the matching url and title.
+/* find_reference - return true if Link found in references matching label.
+ * 'Link' is modified with the matching url and title.
  */
-func (p *yyParser) findReference(label *element) (*link, bool) {
-	for cur := p.references; cur != nil; cur = cur.next {
-		l := cur.contents.link
-		if match_inlines(label, l.label) {
+func (p *yyParser) findReference(label *Element) (*Link, bool) {
+	for cur := p.references; cur != nil; cur = cur.Next {
+		l := cur.Contents.Link
+		if match_inlines(label, l.Label) {
 			return l, true
 		}
 	}
@@ -997,9 +997,9 @@ func (p *yyParser) findReference(label *element) (*link, bool) {
 /* find_note - return true if note found in notes matching label.
  * if found, 'result' is set to point to matched note.
  */
-func (p *yyParser) find_note(label string) (*element, bool) {
-	for el := p.notes; el != nil; el = el.next {
-		if label == el.contents.str {
+func (p *yyParser) find_note(label string) (*Element, bool) {
+	for el := p.notes; el != nil; el = el.Next {
+		if label == el.Contents.Str {
 			return el, true
 		}
 	}
@@ -1008,26 +1008,26 @@ func (p *yyParser) find_note(label string) (*element, bool) {
 
 /* print tree of elements, for debugging only.
  */
-func print_tree(w io.Writer, elt *element, indent int) {
+func print_tree(w io.Writer, elt *Element, indent int) {
 	var key string
 
 	for elt != nil {
 		for i := 0; i < indent; i++ {
 			fmt.Fprint(w, "\t")
 		}
-		key = keynames[elt.key]
+		key = keynames[elt.Key]
 		if key == "" {
 			key = "?"
 		}
-		if elt.key == STR {
-			fmt.Fprintf(w, "%p:\t%s\t'%s'\n", elt, key, elt.contents.str)
+		if elt.Key == STR {
+			fmt.Fprintf(w, "%p:\t%s\t'%s'\n", elt, key, elt.Contents.Str)
 		} else {
-			fmt.Fprintf(w, "%p:\t%s %p\n", elt, key, elt.next)
+			fmt.Fprintf(w, "%p:\t%s %p\n", elt, key, elt.Next)
 		}
-		if elt.children != nil {
-			print_tree(w, elt.children, indent+1)
+		if elt.Children != nil {
+			print_tree(w, elt.Children, indent+1)
 		}
-		elt = elt.next
+		elt = elt.Next
 	}
 }
 

@@ -14,7 +14,7 @@ field.
 */
 
 type elemHeap struct {
-	rows [][]element
+	rows [][]Element
 	heapPos
 	rowSize int
 
@@ -24,13 +24,13 @@ type elemHeap struct {
 
 type heapPos struct {
 	iRow int
-	row  []element
+	row  []Element
 }
 
-func (h *elemHeap) nextRow() []element {
+func (h *elemHeap) nextRow() []Element {
 	h.iRow++
 	if h.iRow == len(h.rows) {
-		h.rows = append(h.rows, make([]element, h.rowSize))
+		h.rows = append(h.rows, make([]Element, h.rowSize))
 	}
 	h.row = h.rows[h.iRow]
 	return h.row
@@ -38,7 +38,7 @@ func (h *elemHeap) nextRow() []element {
 
 func (h *elemHeap) init(size int) {
 	h.rowSize = size
-	h.rows = [][]element{make([]element, size)}
+	h.rows = [][]Element{make([]Element, size)}
 	h.row = h.rows[h.iRow]
 	h.base = h.heapPos
 }

@@ -38,7 +38,7 @@ func ToGroffMM(w Writer) Formatter {
 	f.escape = strings.NewReplacer(`\`, `\e`)
 	return f
 }
-func (f *troffOut) FormatBlock(tree *element) {
+func (f *troffOut) FormatBlock(tree *Element) {
 	f.elist(tree)
 }
 func (f *troffOut) Finish() {
@@ -76,10 +76,10 @@ func (w *troffOut) str(s string) *troffOut {
 	return w
 }
 
-func (w *troffOut) children(el *element) *troffOut {
-	return w.elist(el.children)
+func (w *troffOut) children(el *Element) *troffOut {
+	return w.elist(el.Children)
 }
-func (w *troffOut) inline(pfx string, el *element, sfx string) *troffOut {
+func (w *troffOut) inline(pfx string, el *Element, sfx string) *troffOut {
 	return w.s(pfx).children(el).s(sfx)
 }
 
@@ -88,24 +88,24 @@ func (w *troffOut) req(name string) *troffOut {
 }
 
 // write a list of elements
-func (w *troffOut) elist(list *element) *troffOut {
+func (w *troffOut) elist(list *Element) *troffOut {
 	for i := 0; list != nil; i++ {
 		w.elem(list, i == 0)
-		list = list.next
+		list = list.Next
 	}
 	return w
 }
 
-func (w *troffOut) elem(elt *element, isFirst bool) *troffOut {
+func (w *troffOut) elem(elt *Element, isFirst bool) *troffOut {
 	var s string
 
-	switch elt.key {
+	switch elt.Key {
 	case SPACE:
-		s = elt.contents.str
+		s = elt.Contents.Str
 	case LINEBREAK:
 		w.req("br\n")
 	case STR:
-		w.str(elt.contents.str)
+		w.str(elt.Contents.Str)
 	case ELLIPSIS:
 		s = "..."
 	case EMDASH:
@@ -119,15 +119,15 @@ func (w *troffOut) elem(elt *element, isFirst bool) *troffOut {
 	case DOUBLEQUOTED:
 		w.inline(`\[lq]`, elt, `\[rq]`)
 	case CODE:
-		w.s(`\fC`).str(elt.contents.str).s(`\fR`)
+		w.s(`\fC`).str(elt.Contents.Str).s(`\fR`)
 	case HTML:
 		/* don't print HTML */
 	case LINK:
-		link := elt.contents.link
-		w.elist(link.label)
-		w.s(" (").s(link.url).s(")")
+		link := elt.Contents.Link
+		w.elist(link.Label)
+		w.s(" (").s(link.URL).s(")")
 	case IMAGE:
-		w.s("[IMAGE: ").elist(elt.contents.link.label).s("]")
+		w.s("[IMAGE: ").elist(elt.Contents.Link.Label).s("]")
 		/* not supported */
 	case EMPH:
 		w.inline(`\fI`, elt, `\fR`)
@@ -150,7 +150,7 @@ func (w *troffOut) elem(elt *element, isFirst bool) *troffOut {
 		/* Shouldn't occur - these are handled by process_raw_blocks() */
 		log.Fatalf("RAW")
 	case H1, H2, H3, H4, H5, H6:
-		h := ".H " + string('1'+elt.key-H1) + ` "` /* assumes H1 ... H6 are in order */
+		h := ".H " + string('1'+elt.Key-H1) + ` "` /* assumes H1 ... H6 are in order */
 		w.br().inline(h, elt, `"`)
 	case PLAIN:
 		w.br().children(elt)
@@ -166,7 +166,7 @@ func (w *troffOut) elem(elt *element, isFirst bool) *troffOut {
 		/* don't print HTML block */
 	case VERBATIM:
 		w.req("VERBON 2\n")
-		w.str(elt.contents.str)
+		w.str(elt.Contents.Str)
 		w.s(".VERBOFF")
 	case BULLETLIST:
 		w.req("BL").children(elt).req("LE 1")
@@ -191,9 +191,9 @@ func (w *troffOut) elem(elt *element, isFirst bool) *troffOut {
 		w.children(elt)
 		w.req("DE")
 	case NOTE:
-		/* if contents.str == 0, then print note; else ignore, since this
+		/* if Contents.Str == 0, then print note; else ignore, since this
 		 * is a note block that has been incorporated into the notes list */
-		if elt.contents.str == "" {
+		if elt.Contents.Str == "" {
 			w.s("\\*F\n")
 			w.s(".FS\n")
 			w.skipPadding()
@@ -203,7 +203,7 @@ func (w *troffOut) elem(elt *element, isFirst bool) *troffOut {
 	case REFERENCE:
 		/* Nonprinting */
 	default:
-		log.Fatalf("troffOut.elem encountered unknown element key = %d\n", elt.key)
+		log.Fatalf("troffOut.elem encountered unknown Element key = %d\n", elt.Key)
 	}
 	if s != "" {
 		w.s(s)
