@@ -43,7 +43,7 @@ type htmlOut struct {
 	obfuscate bool
 
 	notenum  int
-	endNotes []*element /* List of endnotes to print after main content. */
+	endNotes []*Element /* List of endnotes to print after main content. */
 }
 
 func ToHTML(w Writer) Formatter {
@@ -51,7 +51,7 @@ func ToHTML(w Writer) Formatter {
 	f.baseWriter = baseWriter{w, 2}
 	return f
 }
-func (f *htmlOut) FormatBlock(tree *element) {
+func (f *htmlOut) FormatBlock(tree *Element) {
 	f.elist(tree)
 }
 func (f *htmlOut) Finish() {
@@ -140,40 +140,40 @@ func (w *htmlOut) str(s string) *htmlOut {
 	return w
 }
 
-func (w *htmlOut) children(el *element) *htmlOut {
-	return w.elist(el.children)
+func (w *htmlOut) children(el *Element) *htmlOut {
+	return w.elist(el.Children)
 }
-func (w *htmlOut) inline(tag string, el *element) *htmlOut {
+func (w *htmlOut) inline(tag string, el *Element) *htmlOut {
 	return w.s(tag).children(el).s("</").s(tag[1:])
 }
-func (w *htmlOut) listBlock(tag string, el *element) *htmlOut {
-	return w.sp().s(tag).elist(el.children).br().s("</").s(tag[1:])
+func (w *htmlOut) listBlock(tag string, el *Element) *htmlOut {
+	return w.sp().s(tag).elist(el.Children).br().s("</").s(tag[1:])
 }
-func (w *htmlOut) listItem(tag string, el *element) *htmlOut {
-	return w.br().s(tag).skipPadding().elist(el.children).s("</").s(tag[1:])
+func (w *htmlOut) listItem(tag string, el *Element) *htmlOut {
+	return w.br().s(tag).skipPadding().elist(el.Children).s("</").s(tag[1:])
 }
 
 /* print a list of elements
  */
-func (w *htmlOut) elist(list *element) *htmlOut {
+func (w *htmlOut) elist(list *Element) *htmlOut {
 	for list != nil {
 		w.elem(list)
-		list = list.next
+		list = list.Next
 	}
 	return w
 }
 
-// print an element
-func (w *htmlOut) elem(elt *element) *htmlOut {
+// print an Element
+func (w *htmlOut) elem(elt *Element) *htmlOut {
 	var s string
 
-	switch elt.key {
+	switch elt.Key {
 	case SPACE:
-		s = elt.contents.str
+		s = elt.Contents.Str
 	case LINEBREAK:
 		s = "<br/>\n"
 	case STR:
-		w.str(elt.contents.str)
+		w.str(elt.Contents.Str)
 	case ELLIPSIS:
 		s = "&hellip;"
 	case EMDASH:
@@ -187,25 +187,25 @@ func (w *htmlOut) elem(elt *element) *htmlOut {
 	case DOUBLEQUOTED:
 		w.s("&ldquo;").children(elt).s("&rdquo;")
 	case CODE:
-		w.s("<code>").str(elt.contents.str).s("</code>")
+		w.s("<code>").str(elt.Contents.Str).s("</code>")
 	case HTML:
-		s = elt.contents.str
+		s = elt.Contents.Str
 	case LINK:
 		o := w.obfuscate
-		if strings.Index(elt.contents.link.url, "mailto:") == 0 {
+		if strings.Index(elt.Contents.Link.URL, "mailto:") == 0 {
 			w.obfuscate = true /* obfuscate mailto: links */
 		}
-		w.s(`<a href="`).str(elt.contents.link.url).s(`"`)
-		if len(elt.contents.link.title) > 0 {
-			w.s(` title="`).str(elt.contents.link.title).s(`"`)
+		w.s(`<a href="`).str(elt.Contents.Link.URL).s(`"`)
+		if len(elt.Contents.Link.Title) > 0 {
+			w.s(` title="`).str(elt.Contents.Link.Title).s(`"`)
 		}
-		w.s(">").elist(elt.contents.link.label).s("</a>")
+		w.s(">").elist(elt.Contents.Link.Label).s("</a>")
 		w.obfuscate = o
 	case IMAGE:
-		w.s(`<img src="`).str(elt.contents.link.url).s(`" alt="`)
-		w.elist(elt.contents.link.label).s(`"`)
-		if len(elt.contents.link.title) > 0 {
-			w.s(` title="`).str(elt.contents.link.title).s(`"`)
+		w.s(`<img src="`).str(elt.Contents.Link.URL).s(`" alt="`)
+		w.elist(elt.Contents.Link.Label).s(`"`)
+		if len(elt.Contents.Link.Title) > 0 {
+			w.s(` title="`).str(elt.Contents.Link.Title).s(`"`)
 		}
 		w.s(" />")
 	case EMPH:
@@ -220,7 +220,7 @@ func (w *htmlOut) elem(elt *element) *htmlOut {
 		/* Shouldn't occur - these are handled by process_raw_blocks() */
 		log.Fatalf("RAW")
 	case H1, H2, H3, H4, H5, H6:
-		h := "<h" + string('1'+elt.key-H1) + ">" /* assumes H1 ... H6 are in order */
+		h := "<h" + string('1'+elt.Key-H1) + ">" /* assumes H1 ... H6 are in order */
 		w.sp().inline(h, elt)
 	case PLAIN:
 		w.br().children(elt)
@@ -229,9 +229,9 @@ func (w *htmlOut) elem(elt *element) *htmlOut {
 	case HRULE:
 		w.sp().s("<hr />")
 	case HTMLBLOCK:
-		w.sp().s(elt.contents.str)
+		w.sp().s(elt.Contents.Str)
 	case VERBATIM:
-		w.sp().s("<pre><code>").str(elt.contents.str).s("</code></pre>")
+		w.sp().s("<pre><code>").str(elt.Contents.Str).s("</code></pre>")
 	case BULLETLIST:
 		w.listBlock("<ul>", elt)
 	case ORDEREDLIST:
@@ -249,10 +249,10 @@ func (w *htmlOut) elem(elt *element) *htmlOut {
 	case REFERENCE:
 		/* Nonprinting */
 	case NOTE:
-		/* if contents.str == 0, then print note; else ignore, since this
+		/* if Contents.Str == 0, then print note; else ignore, since this
 		 * is a note block that has been incorporated into the notes list
 		 */
-		if elt.contents.str == "" {
+		if elt.Contents.Str == "" {
 			w.endNotes = append(w.endNotes, elt) /* add an endnote to global endnotes list */
 			w.notenum++
 			nn := w.notenum
@@ -260,7 +260,7 @@ func (w *htmlOut) elem(elt *element) *htmlOut {
 				nn, nn, nn, nn)
 		}
 	default:
-		log.Fatalf("htmlOut.elem encountered unknown element key = %d\n", elt.key)
+		log.Fatalf("htmlOut.elem encountered unknown Element key = %d\n", elt.Key)
 	}
 	if s != "" {
 		w.s(s)

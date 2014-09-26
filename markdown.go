@@ -68,7 +68,7 @@ func NewParser(x *Extensions) (p *Parser) {
 // method is called, which may, for example, print footnotes.
 // A Formatter can be reused.
 type Formatter interface {
-	FormatBlock(*element)
+	FormatBlock(*Element)
 	Finish()
 }
 
@@ -97,7 +97,7 @@ func (p *Parser) Markdown(src io.Reader, f Formatter) {
 	f.Finish()
 }
 
-func (p *Parser) parseRule(rule int, s string) (tree *element) {
+func (p *Parser) parseRule(rule int, s string) (tree *Element) {
 	old := p.yy.ResetBuffer(s)
 	if old != "" && strings.Trim(old, "\r\n ") != "" {
 		log.Fatalln("Buffer not empty", "["+old+"]")
@@ -113,34 +113,34 @@ func (p *Parser) parseRule(rule int, s string) (tree *element) {
 	return
 }
 
-/* process_raw_blocks - traverses an element list, replacing any RAW elements with
+/* process_raw_blocks - traverses an Element list, replacing any RAW elements with
  * the result of parsing them as markdown text, and recursing into the children
  * of parent elements.  The result should be a tree of elements without any RAWs.
  */
-func (p *Parser) processRawBlocks(input *element) *element {
+func (p *Parser) processRawBlocks(input *Element) *Element {
 
-	for current := input; current != nil; current = current.next {
-		if current.key == RAW {
+	for current := input; current != nil; current = current.Next {
+		if current.Key == RAW {
 			/* \001 is used to indicate boundaries between nested lists when there
 			 * is no blank line.  We split the string by \001 and parse
 			 * each chunk separately.
 			 */
-			current.key = LIST
-			current.children = nil
-			listEnd := &current.children
-			for _, contents := range strings.Split(current.contents.str, "\001") {
-				if list := p.parseRule(ruleDoc, contents); list != nil {
+			current.Key = LIST
+			current.Children = nil
+			listEnd := &current.Children
+			for _, Contents := range strings.Split(current.Contents.Str, "\001") {
+				if list := p.parseRule(ruleDoc, Contents); list != nil {
 					*listEnd = list
-					for list.next != nil {
-						list = list.next
+					for list.Next != nil {
+						list = list.Next
 					}
-					listEnd = &list.next
+					listEnd = &list.Next
 				}
 			}
-			current.contents.str = ""
+			current.Contents.Str = ""
 		}
-		if current.children != nil {
-			current.children = p.processRawBlocks(current.children)
+		if current.Children != nil {
+			current.Children = p.processRawBlocks(current.Children)
 		}
 	}
 	return input

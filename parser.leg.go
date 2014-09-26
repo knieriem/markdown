@@ -1,3 +1,4 @@
+
 /*  Original C version https://github.com/jgm/peg-markdown/
  *	Copyright 2008 John MacFarlane (jgm at berkeley dot edu).
  *
@@ -31,24 +32,24 @@ const (
 )
 
 // Semantic value of a parsing action.
-type element struct {
-	key int
-	contents
-	children *element
-	next     *element
+type Element struct {
+	Key int
+	Contents
+	Children *Element
+	Next     *Element
 }
 
-// Information (label, URL and title) for a link.
-type link struct {
-	label *element
-	url   string
-	title string
+// Information (label, URL and title) for a Link.
+type Link struct {
+	Label *Element
+	URL   string
+	Title string
 }
 
-// Union for contents of an Element (string, list, or link).
-type contents struct {
-	str string
-	*link
+// Union for Contents of an Element (string, list, or Link).
+type Contents struct {
+	Str string
+	*Link
 }
 
 // Types of semantic values returned by parsers.
@@ -97,10 +98,11 @@ const (
 type state struct {
 	extension  Extensions
 	heap       elemHeap
-	tree       *element /* Results of parse. */
-	references *element /* List of link references found. */
-	notes      *element /* List of footnotes found. */
+	tree       *Element /* Results of parse. */
+	references *Element /* List of Link references found. */
+	notes      *Element /* List of footnotes found. */
 }
+
 
 const (
 	ruleDoc = iota
@@ -358,11 +360,11 @@ const (
 
 type yyParser struct {
 	state
-	Buffer      string
-	Min, Max    int
-	rules       [251]func() bool
-	commit      func(int) bool
-	ResetBuffer func(string) string
+	Buffer string
+	Min, Max int
+	rules [251]func() bool
+	commit func(int)bool
+	ResetBuffer	func(string) string
 }
 
 func (p *yyParser) Parse(ruleId int) (err error) {
@@ -378,13 +380,13 @@ type errPos struct {
 	Line, Pos int
 }
 
-func (e *errPos) String() string {
+func	(e *errPos) String() string {
 	return fmt.Sprintf("%d:%d", e.Line, e.Pos)
 }
 
 type unexpectedCharError struct {
-	After, At errPos
-	Char      byte
+	After, At	errPos
+	Char	byte
 }
 
 func (e *unexpectedCharError) Error() string {
@@ -434,306 +436,304 @@ func (p *yyParser) parseErr() (err error) {
 func (p *yyParser) Init() {
 	var position int
 	var yyp int
-	var yy *element
-	var yyval = make([]*element, 256)
+	var yy *Element
+	var yyval = make([]*Element, 256)
 
 	actions := [...]func(string, int){
 		/* 0 Doc */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 1 Doc */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			p.tree = reverse(a)
+			 p.tree = reverse(a) 
 			yyval[yyp-1] = a
 		},
 		/* 2 Docblock */
 		func(yytext string, _ int) {
-			p.tree = yy
+			 p.tree = yy 
 		},
 		/* 3 Para */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			yy = a
-			yy.key = PARA
+			 yy = a; yy.Key = PARA 
 			yyval[yyp-1] = a
 		},
 		/* 4 Plain */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			yy = a
-			yy.key = PLAIN
+			 yy = a; yy.Key = PLAIN 
 			yyval[yyp-1] = a
 		},
 		/* 5 AtxStart */
 		func(yytext string, _ int) {
-			yy = p.mkElem(H1 + (len(yytext) - 1))
+			 yy = p.mkElem(H1 + (len(yytext) - 1)) 
 		},
 		/* 6 AtxHeading */
 		func(yytext string, _ int) {
-			a := yyval[yyp-1]
-			s := yyval[yyp-2]
-			a = cons(yy, a)
-			yyval[yyp-1] = a
-			yyval[yyp-2] = s
+			s := yyval[yyp-1]
+			a := yyval[yyp-2]
+			 a = cons(yy, a) 
+			yyval[yyp-2] = a
+			yyval[yyp-1] = s
 		},
 		/* 7 AtxHeading */
 		func(yytext string, _ int) {
-			a := yyval[yyp-1]
-			s := yyval[yyp-2]
-			yy = p.mkList(s.key, a)
-			s = nil
-			yyval[yyp-1] = a
-			yyval[yyp-2] = s
+			s := yyval[yyp-1]
+			a := yyval[yyp-2]
+			 yy = p.mkList(s.Key, a)
+              s = nil 
+			yyval[yyp-1] = s
+			yyval[yyp-2] = a
 		},
 		/* 8 SetextHeading1 */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 9 SetextHeading1 */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			yy = p.mkList(H1, a)
+			 yy = p.mkList(H1, a) 
 			yyval[yyp-1] = a
 		},
 		/* 10 SetextHeading2 */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 11 SetextHeading2 */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			yy = p.mkList(H2, a)
+			 yy = p.mkList(H2, a) 
 			yyval[yyp-1] = a
 		},
 		/* 12 BlockQuote */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			yy = p.mkElem(BLOCKQUOTE)
-			yy.children = a
-
+			  yy = p.mkElem(BLOCKQUOTE)
+                yy.Children = a
+             
 			yyval[yyp-1] = a
 		},
 		/* 13 BlockQuoteRaw */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 14 BlockQuoteRaw */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 15 BlockQuoteRaw */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(p.mkString("\n"), a)
+			 a = cons(p.mkString("\n"), a) 
 			yyval[yyp-1] = a
 		},
 		/* 16 BlockQuoteRaw */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			yy = p.mkStringFromList(a, true)
-			yy.key = RAW
-
+			   yy = p.mkStringFromList(a, true)
+                     yy.Key = RAW
+                 
 			yyval[yyp-1] = a
 		},
 		/* 17 VerbatimChunk */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(p.mkString("\n"), a)
+			 a = cons(p.mkString("\n"), a) 
 			yyval[yyp-1] = a
 		},
 		/* 18 VerbatimChunk */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 19 VerbatimChunk */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			yy = p.mkStringFromList(a, false)
+			 yy = p.mkStringFromList(a, false) 
 			yyval[yyp-1] = a
 		},
 		/* 20 Verbatim */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 21 Verbatim */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			yy = p.mkStringFromList(a, false)
-			yy.key = VERBATIM
+			 yy = p.mkStringFromList(a, false)
+                 yy.Key = VERBATIM 
 			yyval[yyp-1] = a
 		},
 		/* 22 HorizontalRule */
 		func(yytext string, _ int) {
-			yy = p.mkElem(HRULE)
+			 yy = p.mkElem(HRULE) 
 		},
 		/* 23 BulletList */
 		func(yytext string, _ int) {
-			yy.key = BULLETLIST
+			 yy.Key = BULLETLIST 
 		},
 		/* 24 ListTight */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 25 ListTight */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			yy = p.mkList(LIST, a)
+			 yy = p.mkList(LIST, a) 
 			yyval[yyp-1] = a
 		},
 		/* 26 ListLoose */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-
-			li := b.children
-			li.contents.str += "\n\n"
-			a = cons(b, a)
-
-			yyval[yyp-1] = a
+			
+                  li := b.Children
+                  li.Contents.Str += "\n\n"
+                  a = cons(b, a)
+              
 			yyval[yyp-2] = b
+			yyval[yyp-1] = a
 		},
 		/* 27 ListLoose */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-			yy = p.mkList(LIST, a)
+			 yy = p.mkList(LIST, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
 		/* 28 ListItem */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 29 ListItem */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 30 ListItem */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-
-			raw := p.mkStringFromList(a, false)
-			raw.key = RAW
-			yy = p.mkElem(LISTITEM)
-			yy.children = raw
-
+			
+               raw := p.mkStringFromList(a, false)
+               raw.Key = RAW
+               yy = p.mkElem(LISTITEM)
+               yy.Children = raw
+            
 			yyval[yyp-1] = a
 		},
 		/* 31 ListItemTight */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 32 ListItemTight */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 33 ListItemTight */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-
-			raw := p.mkStringFromList(a, false)
-			raw.key = RAW
-			yy = p.mkElem(LISTITEM)
-			yy.children = raw
-
+			
+               raw := p.mkStringFromList(a, false)
+               raw.Key = RAW
+               yy = p.mkElem(LISTITEM)
+               yy.Children = raw
+            
 			yyval[yyp-1] = a
 		},
 		/* 34 ListBlock */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 35 ListBlock */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 36 ListBlock */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			yy = p.mkStringFromList(a, false)
+			 yy = p.mkStringFromList(a, false) 
 			yyval[yyp-1] = a
 		},
 		/* 37 ListContinuationBlock */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			if len(yytext) == 0 {
-				a = cons(p.mkString("\001"), a) // block separator
-			} else {
-				a = cons(p.mkString(yytext), a)
-			}
-
+			   if len(yytext) == 0 {
+                                   a = cons(p.mkString("\001"), a) // block separator
+                              } else {
+                                   a = cons(p.mkString(yytext), a)
+                              }
+                          
 			yyval[yyp-1] = a
 		},
 		/* 38 ListContinuationBlock */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 39 ListContinuationBlock */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			yy = p.mkStringFromList(a, false)
+			  yy = p.mkStringFromList(a, false) 
 			yyval[yyp-1] = a
 		},
 		/* 40 OrderedList */
 		func(yytext string, _ int) {
-			yy.key = ORDEREDLIST
+			 yy.Key = ORDEREDLIST 
 		},
 		/* 41 HtmlBlock */
 		func(yytext string, _ int) {
-			if p.extension.FilterHTML {
-				yy = p.mkList(LIST, nil)
-			} else {
-				yy = p.mkString(yytext)
-				yy.key = HTMLBLOCK
-			}
-
+			   if p.extension.FilterHTML {
+                    yy = p.mkList(LIST, nil)
+                } else {
+                    yy = p.mkString(yytext)
+                    yy.Key = HTMLBLOCK
+                }
+            
 		},
 		/* 42 StyleBlock */
 		func(yytext string, _ int) {
-			if p.extension.FilterStyles {
-				yy = p.mkList(LIST, nil)
-			} else {
-				yy = p.mkString(yytext)
-				yy.key = HTMLBLOCK
-			}
-
+			   if p.extension.FilterStyles {
+                        yy = p.mkList(LIST, nil)
+                    } else {
+                        yy = p.mkString(yytext)
+                        yy.Key = HTMLBLOCK
+                    }
+                
 		},
 		/* 43 Inlines */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			c := yyval[yyp-2]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = c
 		},
@@ -741,88 +741,83 @@ func (p *yyParser) Init() {
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			c := yyval[yyp-2]
-			a = cons(c, a)
+			 a = cons(c, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = c
 		},
 		/* 45 Inlines */
 		func(yytext string, _ int) {
-			a := yyval[yyp-1]
 			c := yyval[yyp-2]
-			yy = p.mkList(LIST, a)
+			a := yyval[yyp-1]
+			 yy = p.mkList(LIST, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = c
 		},
 		/* 46 Space */
 		func(yytext string, _ int) {
-			yy = p.mkString(" ")
-			yy.key = SPACE
+			 yy = p.mkString(" ")
+          yy.Key = SPACE 
 		},
 		/* 47 Str */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(p.mkString(yytext), a)
+			 a = cons(p.mkString(yytext), a) 
 			yyval[yyp-1] = a
 		},
 		/* 48 Str */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 49 Str */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			if a.next == nil {
-				yy = a
-			} else {
-				yy = p.mkList(LIST, a)
-			}
+			 if a.Next == nil { yy = a; } else { yy = p.mkList(LIST, a) } 
 			yyval[yyp-1] = a
 		},
 		/* 50 StrChunk */
 		func(yytext string, _ int) {
-			yy = p.mkString(yytext)
+			 yy = p.mkString(yytext) 
 		},
 		/* 51 AposChunk */
 		func(yytext string, _ int) {
-			yy = p.mkElem(APOSTROPHE)
+			 yy = p.mkElem(APOSTROPHE) 
 		},
 		/* 52 EscapedChar */
 		func(yytext string, _ int) {
-			yy = p.mkString(yytext)
+			 yy = p.mkString(yytext) 
 		},
 		/* 53 Entity */
 		func(yytext string, _ int) {
-			yy = p.mkString(yytext)
-			yy.key = HTML
+			 yy = p.mkString(yytext); yy.Key = HTML 
 		},
 		/* 54 NormalEndline */
 		func(yytext string, _ int) {
-			yy = p.mkString("\n")
-			yy.key = SPACE
+			 yy = p.mkString("\n")
+                    yy.Key = SPACE 
 		},
 		/* 55 TerminalEndline */
 		func(yytext string, _ int) {
-			yy = nil
+			 yy = nil 
 		},
 		/* 56 LineBreak */
 		func(yytext string, _ int) {
-			yy = p.mkElem(LINEBREAK)
+			 yy = p.mkElem(LINEBREAK) 
 		},
 		/* 57 Symbol */
 		func(yytext string, _ int) {
-			yy = p.mkString(yytext)
+			 yy = p.mkString(yytext) 
 		},
 		/* 58 UlOrStarLine */
 		func(yytext string, _ int) {
-			yy = p.mkString(yytext)
+			 yy = p.mkString(yytext) 
 		},
 		/* 59 EmphStar */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-			a = cons(b, a)
+			 a = cons(b, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
@@ -830,7 +825,7 @@ func (p *yyParser) Init() {
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-			a = cons(b, a)
+			 a = cons(b, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
@@ -838,15 +833,15 @@ func (p *yyParser) Init() {
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-			yy = p.mkList(EMPH, a)
-			yyval[yyp-1] = a
+			 yy = p.mkList(EMPH, a) 
 			yyval[yyp-2] = b
+			yyval[yyp-1] = a
 		},
 		/* 62 EmphUl */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-			a = cons(b, a)
+			 a = cons(b, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
@@ -854,15 +849,15 @@ func (p *yyParser) Init() {
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-			a = cons(b, a)
+			 a = cons(b, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
 		/* 64 EmphUl */
 		func(yytext string, _ int) {
-			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-			yy = p.mkList(EMPH, a)
+			a := yyval[yyp-1]
+			 yy = p.mkList(EMPH, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
@@ -870,7 +865,7 @@ func (p *yyParser) Init() {
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-			a = cons(b, a)
+			 a = cons(b, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
@@ -878,7 +873,7 @@ func (p *yyParser) Init() {
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-			yy = p.mkList(STRONG, a)
+			 yy = p.mkList(STRONG, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
@@ -886,7 +881,7 @@ func (p *yyParser) Init() {
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-			a = cons(b, a)
+			 a = cons(b, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
@@ -894,21 +889,21 @@ func (p *yyParser) Init() {
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-			yy = p.mkList(STRONG, a)
+			 yy = p.mkList(STRONG, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
 		/* 69 TwoTildeClose */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			yy = a
+			 yy = a; 
 			yyval[yyp-1] = a
 		},
 		/* 70 Strike */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-			a = cons(b, a)
+			 a = cons(b, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
@@ -916,95 +911,95 @@ func (p *yyParser) Init() {
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-			yy = p.mkList(STRIKE, a)
+			 yy = p.mkList(STRIKE, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
 		/* 72 Image */
 		func(yytext string, _ int) {
-			if yy.key == LINK {
-				yy.key = IMAGE
-			} else {
-				result := yy
-				yy.children = cons(p.mkString("!"), result.children)
-			}
-
+				if yy.Key == LINK {
+			yy.Key = IMAGE
+		} else {
+			result := yy
+			yy.Children = cons(p.mkString("!"), result.Children)
+		}
+	
 		},
 		/* 73 ReferenceLinkDouble */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-
-			if match, found := p.findReference(b.children); found {
-				yy = p.mkLink(a.children, match.url, match.title)
-				a = nil
-				b = nil
-			} else {
-				result := p.mkElem(LIST)
-				result.children = cons(p.mkString("["), cons(a, cons(p.mkString("]"), cons(p.mkString(yytext),
-					cons(p.mkString("["), cons(b, p.mkString("]")))))))
-				yy = result
-			}
-
+			
+                           if match, found := p.findReference(b.Children); found {
+                               yy = p.mkLink(a.Children, match.URL, match.Title);
+                               a = nil
+                               b = nil
+                           } else {
+                               result := p.mkElem(LIST)
+                               result.Children = cons(p.mkString("["), cons(a, cons(p.mkString("]"), cons(p.mkString(yytext),
+                                                   cons(p.mkString("["), cons(b, p.mkString("]")))))))
+                               yy = result
+                           }
+                       
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
 		/* 74 ReferenceLinkSingle */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-
-			if match, found := p.findReference(a.children); found {
-				yy = p.mkLink(a.children, match.url, match.title)
-				a = nil
-			} else {
-				result := p.mkElem(LIST)
-				result.children = cons(p.mkString("["), cons(a, cons(p.mkString("]"), p.mkString(yytext))))
-				yy = result
-			}
-
+			
+                           if match, found := p.findReference(a.Children); found {
+                               yy = p.mkLink(a.Children, match.URL, match.Title)
+                               a = nil
+                           } else {
+                               result := p.mkElem(LIST)
+                               result.Children = cons(p.mkString("["), cons(a, cons(p.mkString("]"), p.mkString(yytext))));
+                               yy = result
+                           }
+                       
 			yyval[yyp-1] = a
 		},
 		/* 75 ExplicitLink */
 		func(yytext string, _ int) {
-			l := yyval[yyp-1]
-			s := yyval[yyp-2]
-			t := yyval[yyp-3]
-			yy = p.mkLink(l.children, s.contents.str, t.contents.str)
-			s = nil
-			t = nil
-			l = nil
-			yyval[yyp-1] = l
-			yyval[yyp-2] = s
-			yyval[yyp-3] = t
+			s := yyval[yyp-1]
+			t := yyval[yyp-2]
+			l := yyval[yyp-3]
+			 yy = p.mkLink(l.Children, s.Contents.Str, t.Contents.Str)
+                  s = nil
+                  t = nil
+                  l = nil 
+			yyval[yyp-2] = t
+			yyval[yyp-3] = l
+			yyval[yyp-1] = s
 		},
 		/* 76 Source */
 		func(yytext string, _ int) {
-			yy = p.mkString(yytext)
+			 yy = p.mkString(yytext) 
 		},
 		/* 77 Title */
 		func(yytext string, _ int) {
-			yy = p.mkString(yytext)
+			 yy = p.mkString(yytext) 
 		},
 		/* 78 AutoLinkUrl */
 		func(yytext string, _ int) {
-			yy = p.mkLink(p.mkString(yytext), yytext, "")
+			   yy = p.mkLink(p.mkString(yytext), yytext, "") 
 		},
 		/* 79 AutoLinkEmail */
 		func(yytext string, _ int) {
-
-			yy = p.mkLink(p.mkString(yytext), "mailto:"+yytext, "")
-
+			
+                    yy = p.mkLink(p.mkString(yytext), "mailto:"+yytext, "")
+                
 		},
 		/* 80 Reference */
 		func(yytext string, _ int) {
 			l := yyval[yyp-1]
 			s := yyval[yyp-2]
 			t := yyval[yyp-3]
-			yy = p.mkLink(l.children, s.contents.str, t.contents.str)
-			s = nil
-			t = nil
-			l = nil
-			yy.key = REFERENCE
+			 yy = p.mkLink(l.Children, s.Contents.Str, t.Contents.Str)
+              s = nil
+              t = nil
+              l = nil
+              yy.Key = REFERENCE 
 			yyval[yyp-1] = l
 			yyval[yyp-2] = s
 			yyval[yyp-3] = t
@@ -1012,29 +1007,29 @@ func (p *yyParser) Init() {
 		/* 81 Label */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 82 Label */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			yy = p.mkList(LIST, a)
+			 yy = p.mkList(LIST, a) 
 			yyval[yyp-1] = a
 		},
 		/* 83 RefSrc */
 		func(yytext string, _ int) {
-			yy = p.mkString(yytext)
-			yy.key = HTML
+			 yy = p.mkString(yytext)
+           yy.Key = HTML 
 		},
 		/* 84 RefTitle */
 		func(yytext string, _ int) {
-			yy = p.mkString(yytext)
+			 yy = p.mkString(yytext) 
 		},
 		/* 85 References */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-			a = cons(b, a)
+			 a = cons(b, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
@@ -1042,64 +1037,63 @@ func (p *yyParser) Init() {
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-			p.references = reverse(a)
-			p.state.heap.hasGlobals = true
-
+			 p.references = reverse(a)
+               p.state.heap.hasGlobals = true
+             
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
 		/* 87 Code */
 		func(yytext string, _ int) {
-			yy = p.mkString(yytext)
-			yy.key = CODE
+			 yy = p.mkString(yytext); yy.Key = CODE 
 		},
 		/* 88 RawHtml */
 		func(yytext string, _ int) {
-			if p.extension.FilterHTML {
-				yy = p.mkList(LIST, nil)
-			} else {
-				yy = p.mkString(yytext)
-				yy.key = HTML
-			}
-
+			   if p.extension.FilterHTML {
+                    yy = p.mkList(LIST, nil)
+                } else {
+                    yy = p.mkString(yytext)
+                    yy.Key = HTML
+                }
+            
 		},
 		/* 89 StartList */
 		func(yytext string, _ int) {
-			yy = nil
+			 yy = nil 
 		},
 		/* 90 Line */
 		func(yytext string, _ int) {
-			yy = p.mkString(yytext)
+			 yy = p.mkString(yytext) 
 		},
 		/* 91 Apostrophe */
 		func(yytext string, _ int) {
-			yy = p.mkElem(APOSTROPHE)
+			 yy = p.mkElem(APOSTROPHE) 
 		},
 		/* 92 Ellipsis */
 		func(yytext string, _ int) {
-			yy = p.mkElem(ELLIPSIS)
+			 yy = p.mkElem(ELLIPSIS) 
 		},
 		/* 93 EnDash */
 		func(yytext string, _ int) {
-			yy = p.mkElem(ENDASH)
+			 yy = p.mkElem(ENDASH) 
 		},
 		/* 94 EmDash */
 		func(yytext string, _ int) {
-			yy = p.mkElem(EMDASH)
+			 yy = p.mkElem(EMDASH) 
 		},
 		/* 95 SingleQuoted */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-			a = cons(b, a)
+			 a = cons(b, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
 		/* 96 SingleQuoted */
 		func(yytext string, _ int) {
-			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-			yy = p.mkList(SINGLEQUOTED, a)
+			a := yyval[yyp-1]
+			 yy = p.mkList(SINGLEQUOTED, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
@@ -1107,7 +1101,7 @@ func (p *yyParser) Init() {
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-			a = cons(b, a)
+			 a = cons(b, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
@@ -1115,153 +1109,153 @@ func (p *yyParser) Init() {
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
 			b := yyval[yyp-2]
-			yy = p.mkList(DOUBLEQUOTED, a)
+			 yy = p.mkList(DOUBLEQUOTED, a) 
 			yyval[yyp-1] = a
 			yyval[yyp-2] = b
 		},
 		/* 99 NoteReference */
 		func(yytext string, _ int) {
 			ref := yyval[yyp-1]
-
-			p.state.heap.hasGlobals = true
-			if match, ok := p.find_note(ref.contents.str); ok {
-				yy = p.mkElem(NOTE)
-				yy.children = match.children
-				yy.contents.str = ""
-			} else {
-				yy = p.mkString("[^" + ref.contents.str + "]")
-			}
-
+			
+                    p.state.heap.hasGlobals = true
+                    if match, ok := p.find_note(ref.Contents.Str); ok {
+                        yy = p.mkElem(NOTE)
+                        yy.Children = match.Children
+                        yy.Contents.Str = ""
+                    } else {
+                        yy = p.mkString("[^"+ref.Contents.Str+"]")
+                    }
+                
 			yyval[yyp-1] = ref
 		},
 		/* 100 RawNoteReference */
 		func(yytext string, _ int) {
-			yy = p.mkString(yytext)
+			 yy = p.mkString(yytext) 
 		},
 		/* 101 Note */
 		func(yytext string, _ int) {
-			a := yyval[yyp-1]
-			ref := yyval[yyp-2]
-			a = cons(yy, a)
-			yyval[yyp-1] = a
-			yyval[yyp-2] = ref
+			ref := yyval[yyp-1]
+			a := yyval[yyp-2]
+			 a = cons(yy, a) 
+			yyval[yyp-1] = ref
+			yyval[yyp-2] = a
 		},
 		/* 102 Note */
 		func(yytext string, _ int) {
-			a := yyval[yyp-1]
-			ref := yyval[yyp-2]
-			a = cons(yy, a)
-			yyval[yyp-1] = a
-			yyval[yyp-2] = ref
+			ref := yyval[yyp-1]
+			a := yyval[yyp-2]
+			 a = cons(yy, a) 
+			yyval[yyp-1] = ref
+			yyval[yyp-2] = a
 		},
 		/* 103 Note */
 		func(yytext string, _ int) {
-			a := yyval[yyp-1]
-			ref := yyval[yyp-2]
-			yy = p.mkList(NOTE, a)
-			yy.contents.str = ref.contents.str
-
-			yyval[yyp-1] = a
-			yyval[yyp-2] = ref
+			ref := yyval[yyp-1]
+			a := yyval[yyp-2]
+			   yy = p.mkList(NOTE, a)
+                    yy.Contents.Str = ref.Contents.Str
+                
+			yyval[yyp-1] = ref
+			yyval[yyp-2] = a
 		},
 		/* 104 InlineNote */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 105 InlineNote */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			yy = p.mkList(NOTE, a)
-			p.state.heap.hasGlobals = true
-			yy.contents.str = ""
+			 yy = p.mkList(NOTE, a)
+                 p.state.heap.hasGlobals = true
+                 yy.Contents.Str = "" 
 			yyval[yyp-1] = a
 		},
 		/* 106 Notes */
 		func(yytext string, _ int) {
-			a := yyval[yyp-1]
-			b := yyval[yyp-2]
-			a = cons(b, a)
-			yyval[yyp-1] = a
-			yyval[yyp-2] = b
+			b := yyval[yyp-1]
+			a := yyval[yyp-2]
+			 a = cons(b, a) 
+			yyval[yyp-2] = a
+			yyval[yyp-1] = b
 		},
 		/* 107 Notes */
 		func(yytext string, _ int) {
-			a := yyval[yyp-1]
-			b := yyval[yyp-2]
-			p.notes = reverse(a)
-			yyval[yyp-1] = a
-			yyval[yyp-2] = b
+			a := yyval[yyp-2]
+			b := yyval[yyp-1]
+			 p.notes = reverse(a) 
+			yyval[yyp-2] = a
+			yyval[yyp-1] = b
 		},
 		/* 108 RawNoteBlock */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 109 RawNoteBlock */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(p.mkString(yytext), a)
+			 a = cons(p.mkString(yytext), a) 
 			yyval[yyp-1] = a
 		},
 		/* 110 RawNoteBlock */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			yy = p.mkStringFromList(a, true)
-			p.state.heap.hasGlobals = true
-			yy.key = RAW
-
+			   yy = p.mkStringFromList(a, true)
+                      p.state.heap.hasGlobals = true
+                  yy.Key = RAW
+                
 			yyval[yyp-1] = a
 		},
 		/* 111 DefinitionList */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 112 DefinitionList */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			yy = p.mkList(DEFINITIONLIST, a)
+			 yy = p.mkList(DEFINITIONLIST, a) 
 			yyval[yyp-1] = a
 		},
 		/* 113 Definition */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 114 Definition */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-
-			for e := yy.children; e != nil; e = e.next {
-				e.key = DEFDATA
-			}
-			a = cons(yy, a)
-
+			
+				for e := yy.Children; e != nil; e = e.Next {
+					e.Key = DEFDATA
+				}
+				a = cons(yy, a)
+			
 			yyval[yyp-1] = a
 		},
 		/* 115 Definition */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			yy = p.mkList(LIST, a)
+			 yy = p.mkList(LIST, a) 
 			yyval[yyp-1] = a
 		},
 		/* 116 DListTitle */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			a = cons(yy, a)
+			 a = cons(yy, a) 
 			yyval[yyp-1] = a
 		},
 		/* 117 DListTitle */
 		func(yytext string, _ int) {
 			a := yyval[yyp-1]
-			yy = p.mkList(LIST, a)
-			yy.key = DEFTITLE
-
+				yy = p.mkList(LIST, a)
+				yy.Key = DEFTITLE
+			
 			yyval[yyp-1] = a
 		},
 
@@ -1269,7 +1263,7 @@ func (p *yyParser) Init() {
 		func(_ string, count int) {
 			yyp += count
 			if yyp >= len(yyval) {
-				s := make([]*element, cap(yyval)+256)
+				s := make([]*Element, cap(yyval)+256)
 				copy(s, yyval)
 				yyval = s
 			}
@@ -1290,7 +1284,7 @@ func (p *yyParser) Init() {
 	)
 
 	type thunk struct {
-		action     uint8
+		action uint8
 		begin, end int
 	}
 	var thunkPosition, begin, end int
@@ -1382,14 +1376,14 @@ func (p *yyParser) Init() {
 	}
 
 	classes := [...][32]uint8{
-		3: {0, 0, 0, 0, 50, 232, 255, 3, 254, 255, 255, 135, 254, 255, 255, 71, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-		1: {0, 0, 0, 0, 10, 111, 0, 80, 0, 0, 0, 184, 1, 0, 0, 56, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-		0: {0, 0, 0, 0, 0, 0, 255, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-		4: {0, 0, 0, 0, 0, 0, 255, 3, 254, 255, 255, 7, 254, 255, 255, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-		7: {0, 0, 0, 0, 0, 0, 255, 3, 126, 0, 0, 0, 126, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-		2: {0, 0, 0, 0, 0, 0, 0, 0, 254, 255, 255, 7, 254, 255, 255, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-		5: {0, 0, 0, 0, 0, 0, 255, 3, 254, 255, 255, 7, 254, 255, 255, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-		6: {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	3:	{0, 0, 0, 0, 50, 232, 255, 3, 254, 255, 255, 135, 254, 255, 255, 71, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	1:	{0, 0, 0, 0, 10, 111, 0, 80, 0, 0, 0, 184, 1, 0, 0, 56, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	0:	{0, 0, 0, 0, 0, 0, 255, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	4:	{0, 0, 0, 0, 0, 0, 255, 3, 254, 255, 255, 7, 254, 255, 255, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	7:	{0, 0, 0, 0, 0, 0, 255, 3, 126, 0, 0, 0, 126, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	2:	{0, 0, 0, 0, 0, 0, 0, 0, 254, 255, 255, 7, 254, 255, 255, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	5:	{0, 0, 0, 0, 0, 0, 255, 3, 254, 255, 255, 7, 254, 255, 255, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	6:	{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	}
 	matchClass := func(class uint) bool {
 		if (position < len(p.Buffer)) &&
@@ -1408,6 +1402,7 @@ func (p *yyParser) Init() {
 		}
 		return false
 	}
+
 
 	p.rules = [...]func() bool{
 
@@ -1536,7 +1531,7 @@ func (p *yyParser) Init() {
 			position = position0
 			return
 		},
-		/* 3 Para <- (NonindentSpace Inlines BlankLine+ { yy = a; yy.key = PARA }) */
+		/* 3 Para <- (NonindentSpace Inlines BlankLine+ { yy = a; yy.Key = PARA }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
@@ -1564,7 +1559,7 @@ func (p *yyParser) Init() {
 			position, thunkPosition = position0, thunkPosition0
 			return
 		},
-		/* 4 Plain <- (Inlines { yy = a; yy.key = PLAIN }) */
+		/* 4 Plain <- (Inlines { yy = a; yy.Key = PLAIN }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
@@ -1662,22 +1657,22 @@ func (p *yyParser) Init() {
 			position = position0
 			return
 		},
-		/* 7 AtxHeading <- (AtxStart Sp StartList (AtxInline { a = cons(yy, a) })+ (Sp '#'* Sp)? Newline { yy = p.mkList(s.key, a)
-		   s = nil }) */
+		/* 7 AtxHeading <- (AtxStart Sp StartList (AtxInline { a = cons(yy, a) })+ (Sp '#'* Sp)? Newline { yy = p.mkList(s.Key, a)
+              s = nil }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 2)
 			if !p.rules[ruleAtxStart]() {
 				goto ko
 			}
-			doarg(yySet, -2)
+			doarg(yySet, -1)
 			if !p.rules[ruleSp]() {
 				goto ko
 			}
 			if !p.rules[ruleStartList]() {
 				goto ko
 			}
-			doarg(yySet, -1)
+			doarg(yySet, -2)
 			if !p.rules[ruleAtxInline]() {
 				goto ko
 			}
@@ -1914,8 +1909,8 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 14 BlockQuote <- (BlockQuoteRaw {  yy = p.mkElem(BLOCKQUOTE)
-		   yy.children = a
-		}) */
+                yy.Children = a
+             }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
@@ -1932,8 +1927,8 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 15 BlockQuoteRaw <- (StartList ('>' ' '? Line { a = cons(yy, a) } (!'>' !BlankLine Line { a = cons(yy, a) })* (BlankLine { a = cons(p.mkString("\n"), a) })*)+ {   yy = p.mkStringFromList(a, true)
-		    yy.key = RAW
-		}) */
+                     yy.Key = RAW
+                 }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
@@ -2092,7 +2087,7 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 18 Verbatim <- (StartList (VerbatimChunk { a = cons(yy, a) })+ { yy = p.mkStringFromList(a, false)
-		   yy.key = VERBATIM }) */
+                 yy.Key = VERBATIM }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
@@ -2282,7 +2277,7 @@ func (p *yyParser) Init() {
 			position, thunkPosition = position0, thunkPosition0
 			return
 		},
-		/* 21 BulletList <- (&Bullet (ListTight / ListLoose) { yy.key = BULLETLIST }) */
+		/* 21 BulletList <- (&Bullet (ListTight / ListLoose) { yy.Key = BULLETLIST }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			{
@@ -2367,10 +2362,10 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 23 ListLoose <- (StartList (ListItem BlankLine* {
-		    li := b.children
-		    li.contents.str += "\n\n"
-		    a = cons(b, a)
-		})+ { yy = p.mkList(LIST, a) }) */
+                  li := b.Children
+                  li.Contents.Str += "\n\n"
+                  a = cons(b, a)
+              })+ { yy = p.mkList(LIST, a) }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 2)
@@ -2416,11 +2411,11 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 24 ListItem <- (((&[:~] DefMarker) | (&[*+\-] Bullet) | (&[0-9] Enumerator)) StartList ListBlock { a = cons(yy, a) } (ListContinuationBlock { a = cons(yy, a) })* {
-		   raw := p.mkStringFromList(a, false)
-		   raw.key = RAW
-		   yy = p.mkElem(LISTITEM)
-		   yy.children = raw
-		}) */
+               raw := p.mkStringFromList(a, false)
+               raw.Key = RAW
+               yy = p.mkElem(LISTITEM)
+               yy.Children = raw
+            }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
@@ -2471,11 +2466,11 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 25 ListItemTight <- (((&[:~] DefMarker) | (&[*+\-] Bullet) | (&[0-9] Enumerator)) StartList ListBlock { a = cons(yy, a) } (!BlankLine ListContinuationBlock { a = cons(yy, a) })* !ListContinuationBlock {
-		   raw := p.mkStringFromList(a, false)
-		   raw.key = RAW
-		   yy = p.mkElem(LISTITEM)
-		   yy.children = raw
-		}) */
+               raw := p.mkStringFromList(a, false)
+               raw.Key = RAW
+               yy = p.mkElem(LISTITEM)
+               yy.Children = raw
+            }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
@@ -2572,11 +2567,11 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 27 ListContinuationBlock <- (StartList (< BlankLine* > {   if len(yytext) == 0 {
-		         a = cons(p.mkString("\001"), a) // block separator
-		    } else {
-		         a = cons(p.mkString(yytext), a)
-		    }
-		}) (Indent ListBlock { a = cons(yy, a) })+ {  yy = p.mkStringFromList(a, false) }) */
+                                   a = cons(p.mkString("\001"), a) // block separator
+                              } else {
+                                   a = cons(p.mkString(yytext), a)
+                              }
+                          }) (Indent ListBlock { a = cons(yy, a) })+ {  yy = p.mkStringFromList(a, false) }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
@@ -2655,7 +2650,7 @@ func (p *yyParser) Init() {
 			position = position0
 			return
 		},
-		/* 29 OrderedList <- (&Enumerator (ListTight / ListLoose) { yy.key = ORDEREDLIST }) */
+		/* 29 OrderedList <- (&Enumerator (ListTight / ListLoose) { yy.Key = ORDEREDLIST }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			{
@@ -7141,12 +7136,12 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 134 HtmlBlock <- (&'<' < (HtmlBlockInTags / HtmlComment / HtmlBlockSelfClosing) > BlankLine+ {   if p.extension.FilterHTML {
-		        yy = p.mkList(LIST, nil)
-		    } else {
-		        yy = p.mkString(yytext)
-		        yy.key = HTMLBLOCK
-		    }
-		}) */
+                    yy = p.mkList(LIST, nil)
+                } else {
+                    yy = p.mkString(yytext)
+                    yy.Key = HTMLBLOCK
+                }
+            }) */
 		func() (match bool) {
 			position0 := position
 			if !peekChar('<') {
@@ -7705,12 +7700,12 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 140 StyleBlock <- (< InStyleTags > BlankLine* {   if p.extension.FilterStyles {
-		        yy = p.mkList(LIST, nil)
-		    } else {
-		        yy = p.mkString(yytext)
-		        yy.key = HTMLBLOCK
-		    }
-		}) */
+                        yy = p.mkList(LIST, nil)
+                    } else {
+                        yy = p.mkString(yytext)
+                        yy.Key = HTMLBLOCK
+                    }
+                }) */
 		func() (match bool) {
 			position0 := position
 			begin = position
@@ -7904,7 +7899,7 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 143 Space <- (Spacechar+ { yy = p.mkString(" ")
-		   yy.key = SPACE }) */
+          yy.Key = SPACE }) */
 		func() (match bool) {
 			position0 := position
 			if !p.rules[ruleSpacechar]() {
@@ -7923,7 +7918,7 @@ func (p *yyParser) Init() {
 			position = position0
 			return
 		},
-		/* 144 Str <- (StartList < NormalChar+ > { a = cons(p.mkString(yytext), a) } (StrChunk { a = cons(yy, a) })* { if a.next == nil { yy = a; } else { yy = p.mkList(LIST, a) } }) */
+		/* 144 Str <- (StartList < NormalChar+ > { a = cons(p.mkString(yytext), a) } (StrChunk { a = cons(yy, a) })* { if a.Next == nil { yy = a; } else { yy = p.mkList(LIST, a) } }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
@@ -8081,7 +8076,7 @@ func (p *yyParser) Init() {
 			position = position0
 			return
 		},
-		/* 148 Entity <- ((HexEntity / DecEntity / CharEntity) { yy = p.mkString(yytext); yy.key = HTML }) */
+		/* 148 Entity <- ((HexEntity / DecEntity / CharEntity) { yy = p.mkString(yytext); yy.Key = HTML }) */
 		func() (match bool) {
 			position0 := position
 			if !p.rules[ruleHexEntity]() {
@@ -8125,7 +8120,7 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 150 NormalEndline <- (Sp Newline !BlankLine !'>' !AtxStart !(Line ((&[\-] '-'+) | (&[=] '='+)) Newline) { yy = p.mkString("\n")
-		   yy.key = SPACE }) */
+                    yy.Key = SPACE }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			if !p.rules[ruleSp]() {
@@ -8206,7 +8201,7 @@ func (p *yyParser) Init() {
 			if !p.rules[ruleNewline]() {
 				goto ko
 			}
-			if position < len(p.Buffer) {
+			if (position < len(p.Buffer)) {
 				goto ko
 			}
 			do(55)
@@ -8811,13 +8806,13 @@ func (p *yyParser) Init() {
 			position, thunkPosition = position0, thunkPosition0
 			return
 		},
-		/* 167 Image <- ('!' (ExplicitLink / ReferenceLink) {	if yy.key == LINK {
-				yy.key = IMAGE
-			} else {
-				result := yy
-				yy.children = cons(p.mkString("!"), result.children)
-			}
-		}) */
+		/* 167 Image <- ('!' (ExplicitLink / ReferenceLink) {	if yy.Key == LINK {
+			yy.Key = IMAGE
+		} else {
+			result := yy
+			yy.Children = cons(p.mkString("!"), result.Children)
+		}
+	}) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			if !matchChar('!') {
@@ -8873,17 +8868,17 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 170 ReferenceLinkDouble <- (Label < Spnl > !'[]' Label {
-		    if match, found := p.findReference(b.children); found {
-		        yy = p.mkLink(a.children, match.url, match.title);
-		        a = nil
-		        b = nil
-		    } else {
-		        result := p.mkElem(LIST)
-		        result.children = cons(p.mkString("["), cons(a, cons(p.mkString("]"), cons(p.mkString(yytext),
-		                            cons(p.mkString("["), cons(b, p.mkString("]")))))))
-		        yy = result
-		    }
-		}) */
+                           if match, found := p.findReference(b.Children); found {
+                               yy = p.mkLink(a.Children, match.URL, match.Title);
+                               a = nil
+                               b = nil
+                           } else {
+                               result := p.mkElem(LIST)
+                               result.Children = cons(p.mkString("["), cons(a, cons(p.mkString("]"), cons(p.mkString(yytext),
+                                                   cons(p.mkString("["), cons(b, p.mkString("]")))))))
+                               yy = result
+                           }
+                       }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 2)
@@ -8914,15 +8909,15 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 171 ReferenceLinkSingle <- (Label < (Spnl '[]')? > {
-		    if match, found := p.findReference(a.children); found {
-		        yy = p.mkLink(a.children, match.url, match.title)
-		        a = nil
-		    } else {
-		        result := p.mkElem(LIST)
-		        result.children = cons(p.mkString("["), cons(a, cons(p.mkString("]"), p.mkString(yytext))));
-		        yy = result
-		    }
-		}) */
+                           if match, found := p.findReference(a.Children); found {
+                               yy = p.mkLink(a.Children, match.URL, match.Title)
+                               a = nil
+                           } else {
+                               result := p.mkElem(LIST)
+                               result.Children = cons(p.mkString("["), cons(a, cons(p.mkString("]"), p.mkString(yytext))));
+                               yy = result
+                           }
+                       }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
@@ -8953,17 +8948,17 @@ func (p *yyParser) Init() {
 			position, thunkPosition = position0, thunkPosition0
 			return
 		},
-		/* 172 ExplicitLink <- (Label '(' Sp Source Spnl Title Sp ')' { yy = p.mkLink(l.children, s.contents.str, t.contents.str)
-		   s = nil
-		   t = nil
-		   l = nil }) */
+		/* 172 ExplicitLink <- (Label '(' Sp Source Spnl Title Sp ')' { yy = p.mkLink(l.Children, s.Contents.Str, t.Contents.Str)
+                  s = nil
+                  t = nil
+                  l = nil }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 3)
 			if !p.rules[ruleLabel]() {
 				goto ko
 			}
-			doarg(yySet, -1)
+			doarg(yySet, -3)
 			if !matchChar('(') {
 				goto ko
 			}
@@ -8973,14 +8968,14 @@ func (p *yyParser) Init() {
 			if !p.rules[ruleSource]() {
 				goto ko
 			}
-			doarg(yySet, -2)
+			doarg(yySet, -1)
 			if !p.rules[ruleSpnl]() {
 				goto ko
 			}
 			if !p.rules[ruleTitle]() {
 				goto ko
 			}
-			doarg(yySet, -3)
+			doarg(yySet, -2)
 			if !p.rules[ruleSp]() {
 				goto ko
 			}
@@ -9278,8 +9273,8 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 180 AutoLinkEmail <- ('<' 'mailto:'? < [-A-Za-z0-9+_./!%~$]+ '@' (!Newline !'>' .)+ > '>' {
-		    yy = p.mkLink(p.mkString(yytext), "mailto:"+yytext, "")
-		}) */
+                    yy = p.mkLink(p.mkString(yytext), "mailto:"+yytext, "")
+                }) */
 		func() (match bool) {
 			position0 := position
 			if !matchChar('<') {
@@ -9342,11 +9337,11 @@ func (p *yyParser) Init() {
 			position = position0
 			return
 		},
-		/* 181 Reference <- (NonindentSpace !'[]' Label ':' Spnl RefSrc RefTitle BlankLine+ { yy = p.mkLink(l.children, s.contents.str, t.contents.str)
-		   s = nil
-		   t = nil
-		   l = nil
-		   yy.key = REFERENCE }) */
+		/* 181 Reference <- (NonindentSpace !'[]' Label ':' Spnl RefSrc RefTitle BlankLine+ { yy = p.mkLink(l.Children, s.Contents.Str, t.Contents.Str)
+              s = nil
+              t = nil
+              l = nil
+              yy.Key = REFERENCE }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 3)
@@ -9445,7 +9440,7 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 183 RefSrc <- (< Nonspacechar+ > { yy = p.mkString(yytext)
-		   yy.key = HTML }) */
+           yy.Key = HTML }) */
 		func() (match bool) {
 			position0 := position
 			begin = position
@@ -9674,8 +9669,8 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 189 References <- (StartList ((Reference { a = cons(b, a) }) / SkipBlock)* { p.references = reverse(a)
-		   p.state.heap.hasGlobals = true
-		 } commit) */
+               p.state.heap.hasGlobals = true
+             } commit) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 2)
@@ -9791,7 +9786,7 @@ func (p *yyParser) Init() {
 			position = position0
 			return
 		},
-		/* 195 Code <- (((Ticks1 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks1 '`'+)) | (&[\t\n\r ] (!(Sp Ticks1) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks1) / (Ticks2 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks2 '`'+)) | (&[\t\n\r ] (!(Sp Ticks2) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks2) / (Ticks3 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks3 '`'+)) | (&[\t\n\r ] (!(Sp Ticks3) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks3) / (Ticks4 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks4 '`'+)) | (&[\t\n\r ] (!(Sp Ticks4) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks4) / (Ticks5 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks5 '`'+)) | (&[\t\n\r ] (!(Sp Ticks5) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks5)) { yy = p.mkString(yytext); yy.key = CODE }) */
+		/* 195 Code <- (((Ticks1 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks1 '`'+)) | (&[\t\n\r ] (!(Sp Ticks1) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks1) / (Ticks2 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks2 '`'+)) | (&[\t\n\r ] (!(Sp Ticks2) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks2) / (Ticks3 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks3 '`'+)) | (&[\t\n\r ] (!(Sp Ticks3) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks3) / (Ticks4 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks4 '`'+)) | (&[\t\n\r ] (!(Sp Ticks4) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks4) / (Ticks5 Sp < ((!'`' Nonspacechar)+ / ((&[`] (!Ticks5 '`'+)) | (&[\t\n\r ] (!(Sp Ticks5) ((&[\n\r] (Newline !BlankLine)) | (&[\t ] Spacechar))))))+ > Sp Ticks5)) { yy = p.mkString(yytext); yy.Key = CODE }) */
 		func() (match bool) {
 			position0 := position
 			{
@@ -10693,12 +10688,12 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 196 RawHtml <- (< (HtmlComment / HtmlBlockScript / HtmlTag) > {   if p.extension.FilterHTML {
-		        yy = p.mkList(LIST, nil)
-		    } else {
-		        yy = p.mkString(yytext)
-		        yy.key = HTML
-		    }
-		}) */
+                    yy = p.mkList(LIST, nil)
+                } else {
+                    yy = p.mkString(yytext)
+                    yy.Key = HTML
+                }
+            }) */
 		func() (match bool) {
 			position0 := position
 			begin = position
@@ -10942,7 +10937,7 @@ func (p *yyParser) Init() {
 		},
 		/* 202 Eof <- !. */
 		func() (match bool) {
-			if position < len(p.Buffer) {
+			if (position < len(p.Buffer)) {
 				return
 			}
 			match = true
@@ -11640,7 +11635,7 @@ func (p *yyParser) Init() {
 				goto loop5
 			out6:
 				end = position
-				if position < len(p.Buffer) {
+				if (position < len(p.Buffer)) {
 					goto ko
 				}
 			}
@@ -12065,15 +12060,15 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 237 NoteReference <- (&{p.extension.Notes} RawNoteReference {
-		    p.state.heap.hasGlobals = true
-		    if match, ok := p.find_note(ref.contents.str); ok {
-		        yy = p.mkElem(NOTE)
-		        yy.children = match.children
-		        yy.contents.str = ""
-		    } else {
-		        yy = p.mkString("[^"+ref.contents.str+"]")
-		    }
-		}) */
+                    p.state.heap.hasGlobals = true
+                    if match, ok := p.find_note(ref.Contents.Str); ok {
+                        yy = p.mkElem(NOTE)
+                        yy.Children = match.Children
+                        yy.Contents.Str = ""
+                    } else {
+                        yy = p.mkString("[^"+ref.Contents.Str+"]")
+                    }
+                }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
@@ -12140,8 +12135,8 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 239 Note <- (&{p.extension.Notes} NonindentSpace RawNoteReference ':' Sp StartList (RawNoteBlock { a = cons(yy, a) }) (&Indent RawNoteBlock { a = cons(yy, a) })* {   yy = p.mkList(NOTE, a)
-		    yy.contents.str = ref.contents.str
-		}) */
+                    yy.Contents.Str = ref.Contents.Str
+                }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 2)
@@ -12154,7 +12149,7 @@ func (p *yyParser) Init() {
 			if !p.rules[ruleRawNoteReference]() {
 				goto ko
 			}
-			doarg(yySet, -2)
+			doarg(yySet, -1)
 			if !matchChar(':') {
 				goto ko
 			}
@@ -12164,7 +12159,7 @@ func (p *yyParser) Init() {
 			if !p.rules[ruleStartList]() {
 				goto ko
 			}
-			doarg(yySet, -1)
+			doarg(yySet, -2)
 			if !p.rules[ruleRawNoteBlock]() {
 				goto ko
 			}
@@ -12196,8 +12191,8 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 240 InlineNote <- (&{p.extension.Notes} '^[' StartList (!']' Inline { a = cons(yy, a) })+ ']' { yy = p.mkList(NOTE, a)
-		   p.state.heap.hasGlobals = true
-		   yy.contents.str = "" }) */
+                 p.state.heap.hasGlobals = true
+                 yy.Contents.Str = "" }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
@@ -12250,7 +12245,7 @@ func (p *yyParser) Init() {
 			if !p.rules[ruleStartList]() {
 				goto ko
 			}
-			doarg(yySet, -1)
+			doarg(yySet, -2)
 		loop:
 			{
 				position1, thunkPosition1 := position, thunkPosition
@@ -12259,7 +12254,7 @@ func (p *yyParser) Init() {
 					if !p.rules[ruleNote]() {
 						goto nextAlt
 					}
-					doarg(yySet, -2)
+					doarg(yySet, -1)
 					do(106)
 					goto ok
 				nextAlt:
@@ -12285,9 +12280,9 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 242 RawNoteBlock <- (StartList (!BlankLine OptionallyIndentedLine { a = cons(yy, a) })+ (< BlankLine* > { a = cons(p.mkString(yytext), a) }) {   yy = p.mkStringFromList(a, true)
-		       p.state.heap.hasGlobals = true
-		   yy.key = RAW
-		 }) */
+                      p.state.heap.hasGlobals = true
+                  yy.Key = RAW
+                }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
@@ -12372,11 +12367,11 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 244 Definition <- (&(NonindentSpace !Defmark Nonspacechar RawLine BlankLine? Defmark) StartList (DListTitle { a = cons(yy, a) })+ (DefTight / DefLoose) {
-			for e := yy.children; e != nil; e = e.next {
-				e.key = DEFDATA
-			}
-			a = cons(yy, a)
-		} { yy = p.mkList(LIST, a) }) */
+				for e := yy.Children; e != nil; e = e.Next {
+					e.Key = DEFDATA
+				}
+				a = cons(yy, a)
+			} { yy = p.mkList(LIST, a) }) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
@@ -12443,8 +12438,8 @@ func (p *yyParser) Init() {
 			return
 		},
 		/* 245 DListTitle <- (NonindentSpace !Defmark &Nonspacechar StartList (!Endline Inline { a = cons(yy, a) })+ Sp Newline {	yy = p.mkList(LIST, a)
-			yy.key = DEFTITLE
-		}) */
+				yy.Key = DEFTITLE
+			}) */
 		func() (match bool) {
 			position0, thunkPosition0 := position, thunkPosition
 			doarg(yyPush, 1)
@@ -12592,22 +12587,23 @@ func (p *yyParser) Init() {
 	}
 }
 
+
 /*
  * List manipulation functions
  */
 
-/* cons - cons an element onto a list, returning pointer to new head
+/* cons - cons an Element onto a list, returning pointer to new head
  */
-func cons(new, list *element) *element {
-	new.next = list
+func cons(new, list *Element) *Element {
+	new.Next = list
 	return new
 }
 
 /* reverse - reverse a list, returning pointer to new list
  */
-func reverse(list *element) (new *element) {
+func reverse(list *Element) (new *Element) {
 	for list != nil {
-		next := list.next
+		next := list.Next
 		new = cons(list, new)
 		list = next
 	}
@@ -12620,42 +12616,42 @@ func reverse(list *element) (new *element) {
  *  in the parsing actions.
  */
 
-/* p.mkElem - generic constructor for element
+/* p.mkElem - generic constructor for Element
  */
-func (p *yyParser) mkElem(key int) *element {
+func (p *yyParser) mkElem(key int) *Element {
 	r := p.state.heap.row
 	if len(r) == 0 {
 		r = p.state.heap.nextRow()
 	}
 	e := &r[0]
-	*e = element{}
+	*e = Element{}
 	p.state.heap.row = r[1:]
-	e.key = key
+	e.Key = key
 	return e
 }
 
-/* p.mkString - constructor for STR element
+/* p.mkString - constructor for STR Element
  */
-func (p *yyParser) mkString(s string) (result *element) {
+func (p *yyParser) mkString(s string) (result *Element) {
 	result = p.mkElem(STR)
-	result.contents.str = s
+	result.Contents.Str = s
 	return
 }
 
-/* p.mkStringFromList - makes STR element by concatenating a
+/* p.mkStringFromList - makes STR Element by concatenating a
  * reversed list of strings, adding optional extra newline
  */
-func (p *yyParser) mkStringFromList(list *element, extra_newline bool) (result *element) {
+func (p *yyParser) mkStringFromList(list *Element, extra_newline bool) (result *Element) {
 	s := ""
-	for list = reverse(list); list != nil; list = list.next {
-		s += list.contents.str
+	for list = reverse(list); list != nil; list = list.Next {
+		s += list.Contents.Str
 	}
 
 	if extra_newline {
 		s += "\n"
 	}
 	result = p.mkElem(STR)
-	result.contents.str = s
+	result.Contents.Str = s
 	return
 }
 
@@ -12663,56 +12659,56 @@ func (p *yyParser) mkStringFromList(list *element, extra_newline bool) (result *
  * This is designed to be used with cons to build lists in a parser action.
  * The reversing is necessary because cons adds to the head of a list.
  */
-func (p *yyParser) mkList(key int, lst *element) (el *element) {
+func (p *yyParser) mkList(key int, lst *Element) (el *Element) {
 	el = p.mkElem(key)
-	el.children = reverse(lst)
+	el.Children = reverse(lst)
 	return
 }
 
-/* p.mkLink - constructor for LINK element
+/* p.mkLink - constructor for LINK Element
  */
-func (p *yyParser) mkLink(label *element, url, title string) (el *element) {
+func (p *yyParser) mkLink(label *Element, url, title string) (el *Element) {
 	el = p.mkElem(LINK)
-	el.contents.link = &link{label: label, url: url, title: title}
+	el.Contents.Link = &Link{Label: label, URL: url, Title: title}
 	return
 }
 
 /* match_inlines - returns true if inline lists match (case-insensitive...)
  */
-func match_inlines(l1, l2 *element) bool {
+func match_inlines(l1, l2 *Element) bool {
 	for l1 != nil && l2 != nil {
-		if l1.key != l2.key {
+		if l1.Key != l2.Key {
 			return false
 		}
-		switch l1.key {
+		switch l1.Key {
 		case SPACE, LINEBREAK, ELLIPSIS, EMDASH, ENDASH, APOSTROPHE:
 			break
 		case CODE, STR, HTML:
-			if strings.ToUpper(l1.contents.str) != strings.ToUpper(l2.contents.str) {
+			if strings.ToUpper(l1.Contents.Str) != strings.ToUpper(l2.Contents.Str) {
 				return false
 			}
 		case EMPH, STRONG, LIST, SINGLEQUOTED, DOUBLEQUOTED:
-			if !match_inlines(l1.children, l2.children) {
+			if !match_inlines(l1.Children, l2.Children) {
 				return false
 			}
 		case LINK, IMAGE:
 			return false /* No links or images within links */
 		default:
-			log.Fatalf("match_inlines encountered unknown key = %d\n", l1.key)
+			log.Fatalf("match_inlines encountered unknown key = %d\n", l1.Key)
 		}
-		l1 = l1.next
-		l2 = l2.next
+		l1 = l1.Next
+		l2 = l2.Next
 	}
 	return l1 == nil && l2 == nil /* return true if both lists exhausted */
 }
 
-/* find_reference - return true if link found in references matching label.
- * 'link' is modified with the matching url and title.
+/* find_reference - return true if Link found in references matching label.
+ * 'Link' is modified with the matching url and title.
  */
-func (p *yyParser) findReference(label *element) (*link, bool) {
-	for cur := p.references; cur != nil; cur = cur.next {
-		l := cur.contents.link
-		if match_inlines(label, l.label) {
+func (p *yyParser) findReference(label *Element) (*Link, bool) {
+	for cur := p.references; cur != nil; cur = cur.Next {
+		l := cur.Contents.Link
+		if match_inlines(label, l.Label) {
 			return l, true
 		}
 	}
@@ -12722,9 +12718,9 @@ func (p *yyParser) findReference(label *element) (*link, bool) {
 /* find_note - return true if note found in notes matching label.
  * if found, 'result' is set to point to matched note.
  */
-func (p *yyParser) find_note(label string) (*element, bool) {
-	for el := p.notes; el != nil; el = el.next {
-		if label == el.contents.str {
+func (p *yyParser) find_note(label string) (*Element, bool) {
+	for el := p.notes; el != nil; el = el.Next {
+		if label == el.Contents.Str {
 			return el, true
 		}
 	}
@@ -12733,26 +12729,26 @@ func (p *yyParser) find_note(label string) (*element, bool) {
 
 /* print tree of elements, for debugging only.
  */
-func print_tree(w io.Writer, elt *element, indent int) {
+func print_tree(w io.Writer, elt *Element, indent int) {
 	var key string
 
 	for elt != nil {
 		for i := 0; i < indent; i++ {
 			fmt.Fprint(w, "\t")
 		}
-		key = keynames[elt.key]
+		key = keynames[elt.Key]
 		if key == "" {
 			key = "?"
 		}
-		if elt.key == STR {
-			fmt.Fprintf(w, "%p:\t%s\t'%s'\n", elt, key, elt.contents.str)
+		if elt.Key == STR {
+			fmt.Fprintf(w, "%p:\t%s\t'%s'\n", elt, key, elt.Contents.Str)
 		} else {
-			fmt.Fprintf(w, "%p:\t%s %p\n", elt, key, elt.next)
+			fmt.Fprintf(w, "%p:\t%s %p\n", elt, key, elt.Next)
 		}
-		if elt.children != nil {
-			print_tree(w, elt.children, indent+1)
+		if elt.Children != nil {
+			print_tree(w, elt.Children, indent+1)
 		}
-		elt = elt.next
+		elt = elt.Next
 	}
 }
 
